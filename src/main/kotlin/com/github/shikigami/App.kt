@@ -43,6 +43,9 @@ object App : CoroutineScope {
                         config.proxy?.let {
                             Proxy(Proxy.Type.HTTP, InetSocketAddress(it.hostname, it.port))
                         }
+                    connectTimeoutMillis = 10_000L
+                    socketTimeoutMillis = 35_000L
+                    requestTimeoutMillis = 60_000L
                 }
             }
 
