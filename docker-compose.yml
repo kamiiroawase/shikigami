@@ -1,0 +1,15 @@
+services:
+  telegram-bot:
+    image: amazoncorretto:21.0.12-alpine3.24
+    command: ./gradlew run
+    working_dir: /app
+    volumes:
+      - .:/app
+      - ./.docker/.gradle:/root/.gradle
+    restart: unless-stopped
+    networks:
+      - shikigami
+
+networks:
+  shikigami:
+    driver: bridge

@@ -1,0 +1,27 @@
+[versions]
+kotlin = "2.4.20"
+openai = "4.1.0"
+vendeliTelegramBot = "9.6.0"
+commonmark = "0.29.0"
+slf4j = "2.0.17"
+spotless = "8.10.2"
+ksp = "2.3.12"
+
+[libraries]
+openai-client-bom = { module = "com.aallam.openai:openai-client-bom", version.ref = "openai" }
+openai-client = { module = "com.aallam.openai:openai-client" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp" }
+
+vendeli-telegram-bot = { module = "eu.vendeli:telegram-bot", version.ref = "vendeliTelegramBot" }
+vendeli-ktnip = { module = "eu.vendeli:ktnip", version.ref = "vendeliTelegramBot" }
+commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" }
+commonmark-ext-gfm-strikethrough = { module = "org.commonmark:commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
+commonmark-ext-gfm-tables = { module = "org.commonmark:commonmark-ext-gfm-tables", version.ref = "commonmark" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
