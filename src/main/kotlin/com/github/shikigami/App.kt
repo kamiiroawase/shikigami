@@ -29,8 +29,8 @@ import kotlin.time.Duration.Companion.milliseconds
 object App : CoroutineScope {
     override val coroutineContext = Dispatchers.IO + SupervisorJob()
 
-    private val commandStartLimiter = RateLimiter(maxCount = 1)
-    private val commandOpenaiLimiter = RateLimiter(maxCount = 10)
+    private val startLimiter = RateLimiter(maxCount = 1)
+    private val completionLimiter = RateLimiter(maxCount = 10)
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -79,9 +79,9 @@ object App : CoroutineScope {
 
         val from = parsed.from.id.toString()
 
-        when (val command = Config.commandMatches[parsed.command] ?: return) {
+        when (val command = Config.commands[parsed.command] ?: return) {
             is Config.BotCommand.Start -> {
-                if (!commandStartLimiter.allow(from)) {
+                if (!startLimiter.allow(from)) {
                     return
                 }
 
@@ -89,7 +89,7 @@ object App : CoroutineScope {
                     TelegramApi.sendMessageWithRetry(
                         bot = bot,
                         chatId = parsed.chat.id,
-                        relayText = config.commandStartRelayText,
+                        text = config.commandStartText,
                         replyParams = ReplyParameters(parsed.messageId),
                     )
                 }
@@ -104,12 +104,12 @@ object App : CoroutineScope {
                     return
                 }
 
-                if (!commandOpenaiLimiter.allow(from)) {
+                if (!completionLimiter.allow(from)) {
                     launch {
                         TelegramApi.sendMessageWithRetry(
                             bot = bot,
                             chatId = parsed.chat.id,
-                            relayText = config.rateLimitRelayText,
+                            text = config.rateLimitText,
                             replyParams = ReplyParameters(parsed.messageId),
                         )
                     }
@@ -117,7 +117,7 @@ object App : CoroutineScope {
                     return
                 }
 
-                runOpenaiCompletion(
+                handleCompletion(
                     bot = bot,
                     parsed = parsed,
                     command = command,
@@ -127,7 +127,7 @@ object App : CoroutineScope {
         }
     }
 
-    private fun runOpenaiCompletion(
+    private fun handleCompletion(
         bot: TelegramBot,
         parsed: ParsedMessage,
         command: Config.BotCommand.Completion,
@@ -138,24 +138,24 @@ object App : CoroutineScope {
                 TelegramApi.sendMessageWithRetry(
                     bot = bot,
                     chatId = config.adminChatId,
-                    relayText = buildAdminReport(parsed, config),
+                    text = buildAdminReport(parsed, config),
                 )
             }
         }
 
-        val resultMessageDeferred = CompletableDeferred<Message?>()
+        val placeholderMessage = CompletableDeferred<Message?>()
 
         launch {
             try {
                 TelegramApi.sendMessageWithRetry(
                     bot = bot,
                     chatId = parsed.chat.id,
-                    relayText = config.placeHolderRelayText,
+                    text = config.placeholderText,
                     replyParams = ReplyParameters(parsed.messageId),
-                    callback = resultMessageDeferred::complete,
+                    callback = placeholderMessage::complete,
                 )
             } finally {
-                resultMessageDeferred.complete(null)
+                placeholderMessage.complete(null)
             }
         }
 
@@ -164,17 +164,17 @@ object App : CoroutineScope {
                 try {
                     val currentImage =
                         parsed.files.lastOrNull()?.let {
-                            async { TelegramApi.getFileBase64(bot = bot, file = it) }
+                            async { TelegramApi.getFileDataUrl(bot = bot, file = it) }
                         }
                     val replyImage =
                         parsed.replyToFiles.lastOrNull()?.let {
-                            async { TelegramApi.getFileBase64(bot = bot, file = it) }
+                            async { TelegramApi.getFileDataUrl(bot = bot, file = it) }
                         }
 
                     val openAiMessages =
                         ChatMessageFactory.build(
-                            currentImageBase64 = currentImage?.await(),
-                            replyImageBase64 = replyImage?.await(),
+                            currentImageDataUrl = currentImage?.await(),
+                            replyImageDataUrl = replyImage?.await(),
                             message = parsed,
                             systemPrompt = if (command.mmj) config.mmjPrompt else null,
                         )
@@ -195,24 +195,24 @@ object App : CoroutineScope {
                                     it.ifBlank {
                                         null
                                     }
-                                } ?: config.errorEmptyRelayText
+                                } ?: config.errorEmptyText
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
                             e.message?.let {
-                                config.errorMessageRelayText + it
-                            } ?: config.errorUnknownRelayText
+                                config.errorMessageText + it
+                            } ?: config.errorUnknownText
                         }
                     } else {
-                        config.errorFileRelayText
+                        config.errorFileText
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
-                    config.errorFileRelayText
+                    config.errorFileText
                 }
 
-            resultMessageDeferred.await()?.let {
+            placeholderMessage.await()?.let {
                 TelegramApi.editMessageWithRetry(
                     bot = bot,
                     chatId = it.chat.id,
@@ -239,10 +239,10 @@ object App : CoroutineScope {
                 ?.let { "（@$it）：\n" }
                 ?: "：\n"
 
-        return config.adminMessageRelayText +
+        return config.adminMessageText +
             "\n${parsed.from.firstName}" +
             lastName +
             username +
-            parsed.originText
+            parsed.originalText
     }
 }

@@ -18,15 +18,15 @@ object TelegramApi {
     suspend fun sendMessageWithRetry(
         bot: TelegramBot,
         chatId: Long,
-        relayText: String,
+        text: String,
         callback: ((Message?) -> Unit)? = null,
         replyParams: ReplyParameters? = null,
-        times: Int = 0,
+        attempt: Int = 0,
     ) {
-        val text = truncate(relayText, MAX_MESSAGE_LENGTH)
+        val truncated = truncate(text, MAX_MESSAGE_LENGTH)
 
         val action =
-            message(text).apply {
+            message(truncated).apply {
                 if (replyParams != null) {
                     options { replyParameters = replyParams }
                 }
@@ -36,7 +36,7 @@ object TelegramApi {
 
         when {
             sent != null -> callback?.invoke(sent)
-            times < 3 -> sendMessageWithRetry(bot, chatId, text, callback, replyParams, times + 1)
+            attempt < 3 -> sendMessageWithRetry(bot, chatId, text, callback, replyParams, attempt + 1)
             else -> callback?.invoke(null)
         }
     }
@@ -47,7 +47,7 @@ object TelegramApi {
         content: String,
         messageId: Long,
         fallbackContent: String,
-        times: Int = 0,
+        attempt: Int = 0,
     ) {
         val edited =
             editText(messageId) { content }
@@ -57,7 +57,7 @@ object TelegramApi {
 
         when {
             edited -> Unit
-            times < 3 -> editMessageWithRetry(bot, chatId, content, messageId, fallbackContent, times + 1)
+            attempt < 3 -> editMessageWithRetry(bot, chatId, content, messageId, fallbackContent, attempt + 1)
             else -> editText(messageId) { truncate(fallbackContent, MAX_MESSAGE_LENGTH) }.sendReturning(chatId, bot).getOrNull()
         }
     }
@@ -78,13 +78,13 @@ object TelegramApi {
         return text.take(end) + "…"
     }
 
-    suspend fun getFileBase64(
+    suspend fun getFileDataUrl(
         bot: TelegramBot,
         file: FileRef,
-        maxTimes: Int = 3,
-        times: Int = 0,
+        maxAttempts: Int = 3,
+        attempt: Int = 0,
     ): String? {
-        if (times < maxTimes) {
+        if (attempt < maxAttempts) {
             return try {
                 val remote = getFile(file.fileId).sendReturning(bot).getOrNull()
                 val bytes = remote?.let { bot.getFileContent(it) }
@@ -93,12 +93,12 @@ object TelegramApi {
                     "data:image/${file.mimeType};base64," +
                         Base64.getEncoder().encodeToString(bytes)
                 } else {
-                    getFileBase64(bot, file, maxTimes, times + 1)
+                    getFileDataUrl(bot, file, maxAttempts, attempt + 1)
                 }
             } catch (_: CancellationException) {
                 return null
             } catch (_: Exception) {
-                getFileBase64(bot, file, maxTimes, times + 1)
+                getFileDataUrl(bot, file, maxAttempts, attempt + 1)
             }
         }
 

@@ -9,7 +9,7 @@ data class ParsedMessage(
     val files: List<FileRef>,
     val from: User,
     val messageId: Long,
-    val originText: String?,
+    val originalText: String?,
     val replyToBotSelf: Boolean,
     val replyToFiles: List<FileRef>,
     val replyToMessageText: String?,

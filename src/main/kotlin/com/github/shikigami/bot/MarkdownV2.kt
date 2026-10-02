@@ -49,7 +49,7 @@ object MarkdownV2 {
 
     fun render(
         content: String,
-        maxLength: Int,
+        maxLength: Int = TelegramApi.MAX_MESSAGE_LENGTH,
     ): String {
         require(maxLength >= 1) { "maxLength must be positive: $maxLength" }
 
@@ -756,16 +756,16 @@ object MarkdownV2 {
         return width
     }
 
-    private fun isWideChar(c: Char): Boolean =
-        c in '\u1100'..'\u115F' ||
-            c in '\u2E80'..'\u303E' ||
-            c in '\u3041'..'\u33FF' ||
-            c in '\u3400'..'\u4DBF' ||
-            c in '\u4E00'..'\u9FFF' ||
-            c in '\uA000'..'\uA4CF' ||
-            c in '\uAC00'..'\uD7A3' ||
-            c in '\uF900'..'\uFAFF' ||
-            c in '\uFE30'..'\uFE4F' ||
-            c in '\uFF00'..'\uFF60' ||
-            c in '\uFFE0'..'\uFFE6'
+    private fun isWideChar(char: Char): Boolean =
+        char in '\u1100'..'\u115F' ||
+            char in '\u2E80'..'\u303E' ||
+            char in '\u3041'..'\u33FF' ||
+            char in '\u3400'..'\u4DBF' ||
+            char in '\u4E00'..'\u9FFF' ||
+            char in '\uA000'..'\uA4CF' ||
+            char in '\uAC00'..'\uD7A3' ||
+            char in '\uF900'..'\uFAFF' ||
+            char in '\uFE30'..'\uFE4F' ||
+            char in '\uFF00'..'\uFF60' ||
+            char in '\uFFE0'..'\uFFE6'
 }

@@ -11,23 +11,23 @@ class RateLimiter(
     private val windowNanos = TimeUnit.MILLISECONDS.toNanos(60_000)
     private val expireNanos = TimeUnit.MILLISECONDS.toNanos(60_000)
 
-    private val limiters = ConcurrentHashMap<String, FixedWindow>()
+    private val windows = ConcurrentHashMap<String, FixedWindow>()
 
     companion object {
-        private val SWEEPER: ScheduledExecutorService =
+        private val sweeper: ScheduledExecutorService =
             Executors.newSingleThreadScheduledExecutor { runnable ->
                 Thread(runnable, "rate-limiter-sweeper").apply { isDaemon = true }
             }
     }
 
     init {
-        SWEEPER.scheduleAtFixedRate(::sweep, expireNanos, expireNanos, TimeUnit.NANOSECONDS)
+        sweeper.scheduleAtFixedRate(::sweep, expireNanos, expireNanos, TimeUnit.NANOSECONDS)
     }
 
     fun allow(key: String): Boolean {
         var allowed = false
 
-        limiters.compute(key) { _, existing ->
+        windows.compute(key) { _, existing ->
             val now = System.nanoTime()
 
             val window = existing ?: FixedWindow(maxCount, windowNanos, now)
@@ -43,9 +43,9 @@ class RateLimiter(
     private fun sweep() {
         val now = System.nanoTime()
 
-        for (key in limiters.keys) {
-            limiters.computeIfPresent(key) { _, window ->
-                if (now - window.getLastAcquireNanos() > expireNanos) null else window
+        for (key in windows.keys) {
+            windows.computeIfPresent(key) { _, window ->
+                if (now - window.lastAcquireNanos > expireNanos) null else window
             }
         }
     }
@@ -59,8 +59,6 @@ class RateLimiter(
 
         private var lastAcquireNanos = startNanos
         private var windowStartNanos = startNanos
-
-        fun getLastAcquireNanos() = lastAcquireNanos
 
         fun tryAcquire(now: Long): Boolean {
             if (now - windowStartNanos >= windowNanos) {

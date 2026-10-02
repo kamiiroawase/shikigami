@@ -8,8 +8,8 @@ import com.github.shikigami.model.ParsedMessage
 
 object ChatMessageFactory {
     fun build(
-        currentImageBase64: String?,
-        replyImageBase64: String?,
+        currentImageDataUrl: String?,
+        replyImageDataUrl: String?,
         message: ParsedMessage,
         systemPrompt: String?,
     ): List<ChatMessage> {
@@ -19,16 +19,16 @@ object ChatMessageFactory {
             messages.add(ChatMessage(role = ChatRole.System, content = systemPrompt))
         }
 
-        if (replyImageBase64 != null || !message.replyToMessageText.isNullOrBlank()) {
+        if (replyImageDataUrl != null || !message.replyToMessageText.isNullOrBlank()) {
             val role = if (message.replyToBotSelf) ChatRole.Assistant else ChatRole.User
 
             messages.add(
-                if (replyImageBase64 != null) {
+                if (replyImageDataUrl != null) {
                     ChatMessage(
                         role = role,
                         content =
                             buildList {
-                                add(ImagePart(replyImageBase64))
+                                add(ImagePart(replyImageDataUrl))
                                 if (!message.replyToMessageText.isNullOrBlank()) {
                                     add(TextPart(message.replyToMessageText))
                                 }
@@ -41,12 +41,12 @@ object ChatMessageFactory {
         }
 
         val currentMessage =
-            if (currentImageBase64 != null) {
+            if (currentImageDataUrl != null) {
                 ChatMessage(
                     role = ChatRole.User,
                     content =
                         buildList {
-                            add(ImagePart(currentImageBase64))
+                            add(ImagePart(currentImageDataUrl))
                             if (!message.text.isNullOrBlank()) {
                                 add(TextPart(message.text))
                             }

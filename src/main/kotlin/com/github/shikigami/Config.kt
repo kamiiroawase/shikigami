@@ -28,19 +28,19 @@ object Config {
     val botConfig =
         BotConfig(
             adminChatId = props.getProperty("telegram.bot.admin.chat.id").toLong(),
-            adminMessageRelayText = props.getProperty("telegram.bot.admin.message.relay.text"),
+            adminMessageText = props.getProperty("telegram.bot.admin.message.text"),
             allowedChatIds =
                 props
                     .getProperty("telegram.bot.allowed.chat.ids")
                     .split(",")
                     .mapNotNull { it.trim().toLongOrNull() },
-            commandStartRelayText = props.getProperty("telegram.bot.command.start.relay.text"),
-            errorEmptyRelayText = props.getProperty("telegram.bot.error.empty.relay.text"),
-            errorFileRelayText = props.getProperty("telegram.bot.error.file.relay.text"),
-            errorMessageRelayText = props.getProperty("telegram.bot.error.message.relay.text"),
-            errorUnknownRelayText = props.getProperty("telegram.bot.error.unknown.relay.text"),
+            commandStartText = props.getProperty("telegram.bot.command.start.text"),
+            errorEmptyText = props.getProperty("telegram.bot.error.empty.text"),
+            errorFileText = props.getProperty("telegram.bot.error.file.text"),
+            errorMessageText = props.getProperty("telegram.bot.error.message.text"),
+            errorUnknownText = props.getProperty("telegram.bot.error.unknown.text"),
             mmjPrompt = props.getProperty("telegram.bot.mmj.prompt"),
-            placeHolderRelayText = props.getProperty("telegram.bot.place.holder.relay.text"),
+            placeholderText = props.getProperty("telegram.bot.placeholder.text"),
             proxy =
                 props
                     .getProperty("telegram.bot.proxy.hostname")
@@ -48,12 +48,12 @@ object Config {
                     ?.let { hostname ->
                         ProxyConfig(hostname = hostname, port = props.getProperty("telegram.bot.proxy.port").toInt())
                     },
-            rateLimitRelayText = props.getProperty("telegram.bot.rate.limit.relay.text"),
+            rateLimitText = props.getProperty("telegram.bot.rate.limit.text"),
             token = props.getProperty("telegram.bot.token"),
             username = props.getProperty("telegram.bot.username"),
         )
 
-    val commandMatches: Map<String, BotCommand> =
+    val commands: Map<String, BotCommand> =
         run {
             val dmxapiClient = openAiClient("dmxapi")
             val bigmodelClient = openAiClient("bigmodel")
@@ -63,7 +63,7 @@ object Config {
 
             val gptModel = model("gpt")
             val glmModel = model("glm")
-            val dsModel = model("ds")
+            val deepseekModel = model("deepseek")
             val geminiModel = model("gemini")
             val grokModel = model("grok")
             val claudeModel = model("claude")
@@ -88,8 +88,8 @@ object Config {
                 "mmj1" to mmj(dmxapiClient, gptModel),
                 "native2" to native(bigmodelClient, glmModel),
                 "mmj2" to mmj(bigmodelClient, glmModel),
-                "native3" to native(deepseekClient, dsModel),
-                "mmj3" to mmj(deepseekClient, dsModel),
+                "native3" to native(deepseekClient, deepseekModel),
+                "mmj3" to mmj(deepseekClient, deepseekModel),
                 "native4" to native(dmxapiClient, geminiModel),
                 "mmj4" to mmj(dmxapiClient, geminiModel),
                 "native5" to native(dmxapiClient, grokModel),

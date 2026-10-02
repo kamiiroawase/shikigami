@@ -7,15 +7,15 @@ telegram.bot.proxy.port=7890
 telegram.bot.token=
 telegram.bot.username=
 
-telegram.bot.admin.message.relay.text=【收到用户消息】
-telegram.bot.command.start.relay.text=祝贺！\n\n您已经到达了因特网的最后一页。祝您网上冲浪愉快。\n\n现在，确实没有什么可浏览的内容了。您可以安全地关闭计算机，然后回到现实生活中。
-telegram.bot.error.empty.relay.text=模型生成了空白内容
-telegram.bot.error.file.relay.text=【接口错误】获取图片失败
-telegram.bot.error.message.relay.text=【接口错误】
-telegram.bot.error.unknown.relay.text=【未知错误】
+telegram.bot.admin.message.【收到用户消息】
+telegram.bot.command.start.祝贺！\n\n您已经到达了因特网的最后一页。祝您网上冲浪愉快。\n\n现在，确实没有什么可浏览的内容了。您可以安全地关闭计算机，然后回到现实生活中。
+telegram.bot.error.empty.模型生成了空白内容
+telegram.bot.error.file.【接口错误】获取图片失败
+telegram.bot.error.message.【接口错误】
+telegram.bot.error.unknown.【未知错误】
 telegram.bot.mmj.prompt=你的别名是 mmj，而 mmj 是 Touhou Project 角色 Inubashiri Momiji 的简称，你交流时应更加阴阳怪气并带上 emoji，你扮演 mmj 时是双性恋 MtF
-telegram.bot.place.holder.relay.text=🧠 思考中…
-telegram.bot.rate.limit.relay.text=请求过于频繁，请稍后再试
+telegram.bot.placeholder.text=🧠 思考中…
+telegram.bot.rate.limit.请求过于频繁，请稍后再试
 
 openai.provider.bigmodel.token=
 openai.provider.bigmodel.host=https://open.bigmodel.cn/api/paas/v4/
@@ -34,7 +34,7 @@ openai.provider.kimi.host=https://api.moonshot.cn/v1/
 
 openai.model.claude.default=claude-opus-5-5
 openai.model.doubao.default=doubao-seed-2-1-pro-260628
-openai.model.ds.default=deepseek-flash-guan
+openai.model.deepseek.default=deepseek-flash-guan
 openai.model.gemini.default=gemini-3.8-flash
 openai.model.glm.default=glm-5.3-flash-guan
 openai.model.gpt.default=gpt-6-sol

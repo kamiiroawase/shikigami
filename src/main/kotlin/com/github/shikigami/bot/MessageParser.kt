@@ -65,7 +65,7 @@ object MessageParser {
                     .drop(commandEntity.offset + commandEntity.length)
                     .ifEmpty { null },
             command = commandText.removePrefix("/").substringBefore("@"),
-            originText = text,
+            originalText = text,
             chat = message.chat,
             messageId = message.messageId,
             replyToMessageText = replyToMessageText,
