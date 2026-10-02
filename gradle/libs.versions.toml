@@ -1,22 +1,23 @@
 [versions]
 kotlin = "2.4.20"
+ksp = "2.3.12"
 openai = "4.1.0"
-vendeliTelegramBot = "9.6.0"
-telegramMarkdownv2 = "1.1.0"
 slf4j = "2.0.17"
 spotless = "8.10.2"
+telegramMarkdownv2 = "1.1.0"
+vendeliTelegramBot = "9.6.0"
 
 [libraries]
-openai-client-bom = { module = "com.aallam.openai:openai-client-bom", version.ref = "openai" }
-openai-client = { module = "com.aallam.openai:openai-client" }
-ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp" }
-
-vendeli-telegram-bot = { module = "eu.vendeli:telegram-bot", version.ref = "vendeliTelegramBot" }
-telegram-markdownv2-jvm = { module = "com.github.kamiiroawase.telegram-markdownv2:telegram-markdownv2-jvm", version.ref = "telegramMarkdownv2" }
-slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
-
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp" }
+openai-client = { module = "com.aallam.openai:openai-client" }
+openai-client-bom = { module = "com.aallam.openai:openai-client-bom", version.ref = "openai" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+telegram-markdownv2-jvm = { module = "com.github.kamiiroawase.telegram-markdownv2:telegram-markdownv2-jvm", version.ref = "telegramMarkdownv2" }
+vendeli-ktnip = { module = "eu.vendeli:ktnip", version.ref = "vendeliTelegramBot" }
+vendeli-telegram-bot = { module = "eu.vendeli:telegram-bot", version.ref = "vendeliTelegramBot" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }

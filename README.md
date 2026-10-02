@@ -78,9 +78,9 @@ Gradle 缓存挂载到 `.docker/.gradle`，该目录已在 `.gitignore` 中忽�
 ## 技术栈
 
 - [Kotlin](https://kotlinlang.org/) 2.4 / JVM 21，协程并发
-- [vendeli telegram-bot](https://github.com/vendelieu/telegram-bot) —— Telegram Bot 框架
+- [vendeli telegram-bot](https://github.com/vendelieu/telegram-bot) —— Telegram Bot 框架（含 ktnip KSP 插件，启动时加载其生成的 context loader）
 - [openai-client](https://github.com/Aallam/openai-kotlin) —— OpenAI 兼容客户端（OkHttp 引擎），统一访问各 LLM 提供商
-- [commonmark](https://github.com/commonmark/commonmark-java) —— Markdown 解析与 GFM 扩展
+- [telegram-markdownv2](https://github.com/kamiiroawase/telegram-markdownv2) —— Markdown 转 Telegram MarkdownV2，超长回复经 renderChunked 分多条消息发送
 - [Spotless](https://github.com/diffplug/spotless) + ktlint 代码格式化
 
 ## 开发

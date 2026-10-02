@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.spotless)
     application
 }
@@ -27,13 +28,15 @@ spotless {
 }
 
 dependencies {
-    implementation(platform(libs.openai.client.bom))
     implementation(libs.openai.client)
-    implementation(libs.vendeli.telegram.bot)
-    implementation(libs.telegram.markdownv2.jvm)
+    implementation(platform(libs.openai.client.bom))
     implementation(libs.slf4j.simple)
+    implementation(libs.telegram.markdownv2.jvm)
+    implementation(libs.vendeli.telegram.bot)
 
     runtimeOnly(libs.ktor.client.okhttp)
+
+    ksp(libs.vendeli.ktnip)
 
     testImplementation(libs.kotlin.test)
 }
