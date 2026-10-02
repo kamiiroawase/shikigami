@@ -78,9 +78,6 @@ object MessageParser {
                 message.photo
                     ?.lastOrNull()
                     ?.let { listOf(FileRef("jpeg", it.fileId)) }
-                    ?: message.sticker
-                        ?.takeIf { !it.isAnimated && !it.isVideo }
-                        ?.let { listOf(FileRef("webp", it.fileId)) }
                     ?: emptyList(),
             replyToFiles =
                 message.replyToMessage

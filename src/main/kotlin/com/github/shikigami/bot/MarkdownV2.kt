@@ -49,7 +49,7 @@ object MarkdownV2 {
 
     fun render(
         content: String,
-        maxLength: Int = TelegramApi.MAX_MESSAGE_LENGTH,
+        maxLength: Int = 4096,
     ): String {
         require(maxLength >= 1) { "maxLength must be positive: $maxLength" }
 
@@ -61,10 +61,29 @@ object MarkdownV2 {
         val truncated = renderBlocks(parser.parse(content).firstChild, maxLength - 1)
 
         if (truncated.isEmpty()) {
-            return TelegramApi.truncate(converted, maxLength)
+            return truncateEscaped(converted, maxLength)
         }
 
         return truncated.trimEnd() + "…"
+    }
+
+    private fun truncateEscaped(
+        text: String,
+        maxLength: Int,
+    ): String {
+        if (text.length <= maxLength) {
+            return text
+        }
+
+        var end = maxLength - 1
+        if (end > 0 && Character.isHighSurrogate(text[end - 1])) {
+            end--
+        }
+        while (end > 0 && text[end - 1] == '\\') {
+            end--
+        }
+
+        return text.take(end) + "…"
     }
 
     private fun convert(markdown: String): String {
@@ -122,7 +141,7 @@ object MarkdownV2 {
 
             is OrderedList -> {
                 var number = node.markerStartNumber ?: 1
-                shrinkList(node, budget) { "${number++}\\." }
+                shrinkList(node, budget) { "${number++}\\. " }
             }
 
             is BlockQuote -> {
@@ -261,6 +280,9 @@ object MarkdownV2 {
             if (child is SoftLineBreak || child is HardLineBreak) {
                 if (!appendGroup(sb, group, budget)) break
                 group.clear()
+                if (sb.isNotEmpty() && sb.length + 1 <= budget) {
+                    sb.append('\n')
+                }
             } else {
                 group += child
             }
