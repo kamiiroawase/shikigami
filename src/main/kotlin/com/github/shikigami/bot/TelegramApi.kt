@@ -95,8 +95,8 @@ object TelegramApi {
                 } else {
                     getFileDataUrl(bot, file, maxAttempts, attempt + 1)
                 }
-            } catch (_: CancellationException) {
-                return null
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 getFileDataUrl(bot, file, maxAttempts, attempt + 1)
             }

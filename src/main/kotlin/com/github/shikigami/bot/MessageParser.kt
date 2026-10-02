@@ -36,7 +36,7 @@ object MessageParser {
             )
 
         commandText.split("@").getOrNull(1)?.let { target ->
-            if (target != config.username) return null
+            if (!target.equals(config.username, ignoreCase = true)) return null
         }
 
         if (message.chat.id !in config.allowedChatIds && message.chat.type != ChatType.Private) {
@@ -69,7 +69,11 @@ object MessageParser {
             chat = message.chat,
             messageId = message.messageId,
             replyToMessageText = replyToMessageText,
-            replyToBotSelf = message.replyToMessage?.from?.username == config.username,
+            replyToBotSelf =
+                message.replyToMessage
+                    ?.from
+                    ?.username
+                    ?.equals(config.username, ignoreCase = true) == true,
             files =
                 message.photo
                     ?.lastOrNull()
