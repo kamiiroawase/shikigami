@@ -217,7 +217,7 @@ object App : CoroutineScope {
                     bot = bot,
                     chatId = it.chat.id,
                     messageId = it.messageId,
-                    content = MarkdownV2.render(content),
+                    content = MarkdownV2.render(content, TelegramApi.MAX_MESSAGE_LENGTH),
                     fallbackContent = content,
                 )
             }

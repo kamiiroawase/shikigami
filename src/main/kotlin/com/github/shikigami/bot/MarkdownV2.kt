@@ -35,8 +35,6 @@ import org.commonmark.node.ThematicBreak
 import org.commonmark.parser.Parser
 
 object MarkdownV2 {
-    private const val MAX_MESSAGE_LENGTH = 4096
-
     private val SPECIAL_CHARS = "_*[]()~`>#+-=|{}.!\\".toSet()
 
     private val HTML_TAG = Regex("""<(\/?)([a-zA-Z][a-zA-Z0-9]*)([^>]*?)(\/?)>""")
@@ -49,41 +47,284 @@ object MarkdownV2 {
             .extensions(listOf(TablesExtension.create(), StrikethroughExtension.create()))
             .build()
 
-    fun render(content: String): String {
+    fun render(
+        content: String,
+        maxLength: Int,
+    ): String {
+        require(maxLength >= 1) { "maxLength must be positive: $maxLength" }
+
         val converted = convert(content)
-        if (converted.length <= MAX_MESSAGE_LENGTH) {
+        if (converted.length <= maxLength) {
             return converted
         }
 
-        var low = 0
-        var high = content.length
-        val budget = MAX_MESSAGE_LENGTH - 1
+        val truncated = renderBlocks(parser.parse(content).firstChild, maxLength - 1)
 
-        while (low < high) {
-            var mid = (low + high + 1) / 2
-
-            if (mid < content.length && Character.isHighSurrogate(content[mid - 1])) {
-                mid--
-            }
-
-            if (convert(content.take(mid)).length <= budget) {
-                low = mid
-            } else {
-                high = mid - 1
-            }
+        if (truncated.isEmpty()) {
+            return TelegramApi.truncate(converted, maxLength)
         }
 
-        if (low <= 0) {
-            return TelegramApi.truncate(converted)
-        }
-
-        return convert(content.take(low)) + "…"
+        return truncated.trimEnd() + "…"
     }
 
     private fun convert(markdown: String): String {
         val visitor = Visitor()
         parser.parse(markdown).accept(visitor)
         return visitor.output().trim()
+    }
+
+    private fun renderBlocks(
+        first: Node?,
+        budget: Int,
+    ): String {
+        if (budget <= 0) return ""
+
+        val parts = StringBuilder()
+        var node = first
+        while (node != null) {
+            val separator = if (parts.isEmpty()) "" else "\n\n"
+            val remaining = budget - parts.length - separator.length
+            if (remaining <= 0) break
+
+            val block = renderBlock(node)
+            if (block.length <= remaining) {
+                parts.append(separator).append(block)
+                node = node.next
+            } else {
+                val shrunk = shrink(node, remaining)
+                if (shrunk.isNotEmpty()) {
+                    parts.append(separator).append(shrunk)
+                }
+                break
+            }
+        }
+        return parts.toString()
+    }
+
+    private fun renderBlock(node: Node): String {
+        val visitor = Visitor()
+        node.accept(visitor)
+        return visitor.output().trimEnd('\n')
+    }
+
+    private fun shrink(
+        node: Node,
+        budget: Int,
+    ): String =
+        when (node) {
+            is FencedCodeBlock, is IndentedCodeBlock, is TableBlock, is HtmlBlock -> {
+                shrinkRenderedCode(renderBlock(node), budget)
+            }
+
+            is BulletList -> {
+                shrinkList(node, budget) { "• " }
+            }
+
+            is OrderedList -> {
+                var number = node.markerStartNumber ?: 1
+                shrinkList(node, budget) { "${number++}\\." }
+            }
+
+            is BlockQuote -> {
+                shrinkQuote(node, budget)
+            }
+
+            is Heading -> {
+                shrinkParagraph(node, budget, escape("#".repeat(node.level)) + " ")
+            }
+
+            is Paragraph -> {
+                shrinkParagraph(node, budget, "")
+            }
+
+            else -> {
+                ""
+            }
+        }
+
+    private fun shrinkRenderedCode(
+        rendered: String,
+        budget: Int,
+    ): String {
+        val lines = rendered.lines()
+        if (lines.size < 3) return ""
+
+        val open = lines.first()
+        val close = lines.last()
+        if (!close.startsWith("```") || open.length + close.length + 1 > budget) return ""
+
+        val sb = StringBuilder(open)
+        for (line in lines.subList(1, lines.size - 1)) {
+            if (sb.length + line.length + close.length + 1 > budget) break
+            sb.append('\n').append(line)
+        }
+        return sb.append('\n').append(close).toString()
+    }
+
+    private fun shrinkList(
+        list: Node,
+        budget: Int,
+        marker: () -> String,
+    ): String {
+        val items = StringBuilder()
+        var item = list.firstChild
+        while (item != null) {
+            if (item is ListItem) {
+                val separator = if (items.isEmpty()) "" else "\n"
+                val remaining = budget - items.length - separator.length
+                val prefix = marker()
+                val content =
+                    if (prefix.length < remaining) {
+                        val body = renderBlock(item)
+                        if (prefix.length + body.length <= remaining) {
+                            body
+                        } else {
+                            renderBlocks(item.firstChild, remaining - prefix.length).trim()
+                        }
+                    } else {
+                        ""
+                    }
+                if (content.isEmpty()) break
+                items.append(separator).append(applyPrefix(prefix, content))
+            }
+            item = item.next
+        }
+        return items.toString()
+    }
+
+    private fun applyPrefix(
+        prefix: String,
+        body: String,
+    ): String {
+        val indent = " ".repeat(prefix.length)
+        return body
+            .lines()
+            .mapIndexed { index, line ->
+                when {
+                    index == 0 -> prefix + line
+                    line.isEmpty() -> line
+                    else -> indent + line
+                }
+            }.joinToString("\n")
+    }
+
+    private fun shrinkQuote(
+        quote: BlockQuote,
+        budget: Int,
+    ): String {
+        val parts = StringBuilder()
+        var node = quote.firstChild
+        while (node != null) {
+            val separator = if (parts.isEmpty()) "" else "\n"
+            val remaining = budget - parts.length - separator.length
+            if (remaining <= 0) break
+
+            val prefixed = prefixQuote(renderBlock(node))
+            if (prefixed.length <= remaining) {
+                parts.append(separator).append(prefixed)
+                node = node.next
+            } else {
+                val shrunk = renderBlocks(node, remaining).trim()
+                parts.append(separator).append(fitLines(prefixQuote(shrunk).lines(), remaining))
+                break
+            }
+        }
+        return parts.toString()
+    }
+
+    private fun prefixQuote(block: String): String = block.lines().joinToString("\n") { if (it.isEmpty()) ">" else "> $it" }
+
+    private fun fitLines(
+        lines: List<String>,
+        budget: Int,
+    ): String {
+        val sb = StringBuilder()
+        for (line in lines) {
+            val separator = if (sb.isEmpty()) "" else "\n"
+            if (sb.length + separator.length + line.length > budget) break
+            sb.append(separator).append(line)
+        }
+        return sb.toString()
+    }
+
+    private fun shrinkParagraph(
+        node: Node,
+        budget: Int,
+        prefix: String,
+    ): String {
+        if (prefix.length >= budget) return ""
+
+        val sb = StringBuilder(prefix)
+        val group = mutableListOf<Node>()
+        var child = node.firstChild
+        while (child != null) {
+            if (child is SoftLineBreak || child is HardLineBreak) {
+                if (!appendGroup(sb, group, budget)) break
+                group.clear()
+            } else {
+                group += child
+            }
+            child = child.next
+        }
+        appendGroup(sb, group, budget)
+        return sb.toString()
+    }
+
+    private fun appendGroup(
+        sb: StringBuilder,
+        group: List<Node>,
+        budget: Int,
+    ): Boolean {
+        if (group.isEmpty()) return true
+
+        val line = renderInlineGroup(group)
+        if (sb.length + line.length <= budget) {
+            sb.append(line)
+            return true
+        }
+
+        val remaining = budget - sb.length
+        if (remaining > 0) {
+            appendEscapedTruncated(sb, plainText(group), remaining)
+        }
+        return false
+    }
+
+    private fun renderInlineGroup(nodes: List<Node>): String {
+        val visitor = Visitor()
+        nodes.forEach { it.accept(visitor) }
+        return visitor.output()
+    }
+
+    private fun plainText(nodes: List<Node>): String {
+        val visitor = PlainTextVisitor()
+        nodes.forEach { it.accept(visitor) }
+        return visitor.output()
+    }
+
+    private fun appendEscapedTruncated(
+        sb: StringBuilder,
+        text: String,
+        maxLength: Int,
+    ) {
+        var used = 0
+        var index = 0
+        while (index < text.length) {
+            val char = text[index]
+            if (Character.isHighSurrogate(char)) {
+                if (index + 1 >= text.length || used + 2 > maxLength) break
+                sb.append(char).append(text[index + 1])
+                used += 2
+                index += 2
+            } else {
+                val cost = if (char in SPECIAL_CHARS) 2 else 1
+                if (used + cost > maxLength) break
+                if (char in SPECIAL_CHARS) sb.append('\\')
+                sb.append(char)
+                used += cost
+                index++
+            }
+        }
     }
 
     private fun escape(text: String): String =
@@ -104,12 +345,15 @@ object MarkdownV2 {
         private val sb = StringBuilder()
 
         private val openLinkUrls = ArrayDeque<String>()
+        private val openEmphasis = ArrayDeque<String>()
 
         fun output(): String =
-            if (openLinkUrls.isEmpty()) {
+            if (openLinkUrls.isEmpty() && openEmphasis.isEmpty()) {
                 sb.toString()
             } else {
-                sb.toString().trimEnd() + openLinkUrls.joinToString("") { "](${escapeUrl(it)})" }
+                sb.toString().trimEnd() +
+                    openEmphasis.reversed().joinToString("") { "$it" } +
+                    openLinkUrls.joinToString("") { "](${escapeUrl(it)})" }
             }
 
         override fun visit(text: Text) {
@@ -175,23 +419,29 @@ object MarkdownV2 {
         }
 
         override fun visit(emphasis: Emphasis) {
+            openEmphasis.addLast("_")
             sb.append('_')
             visitChildren(emphasis)
             sb.append('_')
+            openEmphasis.removeLast()
         }
 
         override fun visit(strongEmphasis: StrongEmphasis) {
+            openEmphasis.addLast("*")
             sb.append('*')
             visitChildren(strongEmphasis)
             sb.append('*')
+            openEmphasis.removeLast()
         }
 
         override fun visit(customNode: CustomNode) {
             when (customNode) {
                 is Strikethrough -> {
+                    openEmphasis.addLast("~")
                     sb.append('~')
                     visitChildren(customNode)
                     sb.append('~')
+                    openEmphasis.removeLast()
                 }
 
                 else -> {
@@ -252,6 +502,25 @@ object MarkdownV2 {
 
         override fun visit(htmlInline: HtmlInline) {
             sb.append(renderHtmlInline(htmlInline.literal))
+            trackHtmlEmphasis(htmlInline.literal)
+        }
+
+        private fun trackHtmlEmphasis(literal: String) {
+            val match = HTML_TAG.matchEntire(literal.trim()) ?: return
+            val marker =
+                when (match.groupValues[2].lowercase()) {
+                    "b", "strong" -> "*"
+                    "i", "em" -> "_"
+                    "s", "del", "strike" -> "~"
+                    "u", "ins" -> "__"
+                    "code", "kbd", "samp", "tt" -> "`"
+                    else -> return
+                }
+            if (match.groupValues[1].isNotEmpty()) {
+                openEmphasis.removeLastOrNull()
+            } else {
+                openEmphasis.addLast(marker)
+            }
         }
 
         private fun renderHtmlInline(literal: String): String {

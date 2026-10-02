@@ -13,7 +13,7 @@ import kotlinx.coroutines.CancellationException
 import java.util.Base64
 
 object TelegramApi {
-    private const val MAX_MESSAGE_LENGTH = 4096
+    internal const val MAX_MESSAGE_LENGTH = 4096
 
     suspend fun sendMessageWithRetry(
         bot: TelegramBot,
@@ -23,13 +23,15 @@ object TelegramApi {
         replyParams: ReplyParameters? = null,
         times: Int = 0,
     ) {
-        val text = truncate(relayText)
+        val text = truncate(relayText, MAX_MESSAGE_LENGTH)
+
         val action =
             message(text).apply {
                 if (replyParams != null) {
                     options { replyParameters = replyParams }
                 }
             }
+
         val sent = action.sendReturning(chatId, bot).getOrNull()
 
         when {
@@ -56,17 +58,20 @@ object TelegramApi {
         when {
             edited -> Unit
             times < 3 -> editMessageWithRetry(bot, chatId, content, messageId, fallbackContent, times + 1)
-            else -> editText(messageId) { truncate(fallbackContent) }.sendReturning(chatId, bot).getOrNull()
+            else -> editText(messageId) { truncate(fallbackContent, MAX_MESSAGE_LENGTH) }.sendReturning(chatId, bot).getOrNull()
         }
     }
 
-    internal fun truncate(text: String): String {
-        if (text.length <= MAX_MESSAGE_LENGTH) {
+    internal fun truncate(
+        text: String,
+        maxLength: Int,
+    ): String {
+        if (text.length <= maxLength) {
             return text
         }
 
-        var end = MAX_MESSAGE_LENGTH - 1
-        if (Character.isHighSurrogate(text[end - 1])) {
+        var end = maxLength - 1
+        if (end > 0 && Character.isHighSurrogate(text[end - 1])) {
             end--
         }
 
