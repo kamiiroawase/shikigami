@@ -1,7 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.spotless)
-    alias(libs.plugins.ksp)
     application
 }
 
@@ -38,8 +37,6 @@ dependencies {
     runtimeOnly(libs.ktor.client.okhttp)
 
     testImplementation(libs.kotlin.test)
-
-    ksp(libs.vendeli.ktnip)
 }
 
 application {
