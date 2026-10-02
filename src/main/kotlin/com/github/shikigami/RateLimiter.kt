@@ -45,7 +45,7 @@ class RateLimiter(
 
         for (key in windows.keys) {
             windows.computeIfPresent(key) { _, window ->
-                if (now - window.lastAcquireNanos > expireNanos) null else window
+                if (window.isExpired(now, expireNanos)) null else window
             }
         }
     }
@@ -59,6 +59,11 @@ class RateLimiter(
 
         private var lastAcquireNanos = startNanos
         private var windowStartNanos = startNanos
+
+        fun isExpired(
+            now: Long,
+            expireNanos: Long,
+        ): Boolean = now - lastAcquireNanos > expireNanos
 
         fun tryAcquire(now: Long): Boolean {
             if (now - windowStartNanos >= windowNanos) {
