@@ -1,5 +1,6 @@
 package com.github.shikigami.bot
 
+import com.github.kamiiroawase.markdownv2.MarkdownV2
 import com.github.shikigami.model.FileRef
 import eu.vendeli.tgbot.TelegramBot
 import eu.vendeli.tgbot.api.media.getFile
@@ -14,6 +15,55 @@ import java.util.Base64
 
 object TelegramApi {
     internal const val MAX_MESSAGE_LENGTH = 4096
+
+    suspend fun replyMarkdownChunked(
+        bot: TelegramBot,
+        chatId: Long,
+        content: String,
+        placeholderMessageId: Long,
+    ) {
+        val chunks = MarkdownV2.renderChunked(content)
+
+        if (chunks.isEmpty()) {
+            editMessageWithRetry(
+                bot = bot,
+                chatId = chatId,
+                content = MarkdownV2.escape(content),
+                messageId = placeholderMessageId,
+                fallbackContent = content,
+            )
+            return
+        }
+
+        editMessageWithRetry(
+            bot = bot,
+            chatId = chatId,
+            content = chunks.first(),
+            messageId = placeholderMessageId,
+            fallbackContent = content,
+        )
+
+        chunks.drop(1).forEach { chunk ->
+            sendMarkdownWithRetry(bot = bot, chatId = chatId, text = chunk)
+        }
+    }
+
+    private suspend fun sendMarkdownWithRetry(
+        bot: TelegramBot,
+        chatId: Long,
+        text: String,
+        attempt: Int = 0,
+    ) {
+        val sent =
+            message(text)
+                .options { parseMode = ParseMode.MarkdownV2 }
+                .sendReturning(chatId, bot)
+                .getOrNull()
+
+        if (sent == null && attempt < 3) {
+            sendMarkdownWithRetry(bot = bot, chatId = chatId, text = text, attempt = attempt + 1)
+        }
+    }
 
     suspend fun sendMessageWithRetry(
         bot: TelegramBot,

@@ -3,7 +3,6 @@ package com.github.shikigami
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatRole
 import com.github.shikigami.ai.ChatMessageFactory
-import com.github.shikigami.bot.MarkdownV2
 import com.github.shikigami.bot.MessageParser
 import com.github.shikigami.bot.TelegramApi
 import com.github.shikigami.model.BotConfig
@@ -213,12 +212,11 @@ object App : CoroutineScope {
                 }
 
             placeholderMessage.await()?.let {
-                TelegramApi.editMessageWithRetry(
+                TelegramApi.replyMarkdownChunked(
                     bot = bot,
                     chatId = it.chat.id,
-                    messageId = it.messageId,
-                    content = MarkdownV2.render(content, TelegramApi.MAX_MESSAGE_LENGTH),
-                    fallbackContent = content,
+                    content = content,
+                    placeholderMessageId = it.messageId,
                 )
             }
         }

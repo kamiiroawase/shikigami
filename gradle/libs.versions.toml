@@ -2,7 +2,7 @@
 kotlin = "2.4.20"
 openai = "4.1.0"
 vendeliTelegramBot = "9.6.0"
-commonmark = "0.29.0"
+telegramMarkdownv2 = "1.1.0"
 slf4j = "2.0.17"
 spotless = "8.10.2"
 
@@ -12,9 +12,7 @@ openai-client = { module = "com.aallam.openai:openai-client" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp" }
 
 vendeli-telegram-bot = { module = "eu.vendeli:telegram-bot", version.ref = "vendeliTelegramBot" }
-commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" }
-commonmark-ext-gfm-strikethrough = { module = "org.commonmark:commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
-commonmark-ext-gfm-tables = { module = "org.commonmark:commonmark-ext-gfm-tables", version.ref = "commonmark" }
+telegram-markdownv2-jvm = { module = "com.github.kamiiroawase.telegram-markdownv2:telegram-markdownv2-jvm", version.ref = "telegramMarkdownv2" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
