@@ -92,3 +92,7 @@ Gradle 缓存挂载到 `.docker/.gradle`，该目录已在 `.gitignore` 中忽�
 ./gradlew spotlessApply   # 自动格式化
 ./gradlew test            # 运行测试（kotlin-test）
 ```
+
+## 许可
+
+[The Unlicense](LICENSE) —— 公共领域，随意使用。
