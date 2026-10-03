@@ -35,17 +35,20 @@ class AppOrchestrationTest {
     private lateinit var config: BotConfig
     private lateinit var commands: Map<String, Config.BotCommand>
 
-    private var nextUserId = 100L
-
     private companion object {
         const val TOKEN = "1:test-token"
         const val ADMIN_CHAT_ID = 9L
         const val WHITELISTED_CHAT_ID = -100L
 
+        // App 的限流器是单例，用户 ID 必须跨测试唯一，否则会互相污染限流状态
+        var nextUserId = 100L
+
         val MESSAGE_BODY =
             """{"ok":true,"result":{"message_id":555,"date":1,"chat":{"id":42,"type":"private"}}}"""
+        val FAILURE_BODY = """{"ok":false,"error_code":400,"description":"Bad Request: test failure"}"""
         val COMPLETION_BODY =
-            """{"choices":[{"index":0,"message":{"role":"assistant","content":"模型回复"},"finish_reason":"stop"}],""" +
+            """{"id":"chatcmpl-1","created":1,"model":"test-model",""" +
+                """"choices":[{"index":0,"message":{"role":"assistant","content":"模型回复"},"finish_reason":"stop"}],""" +
                 """"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"""
     }
 
@@ -68,7 +71,7 @@ class AppOrchestrationTest {
     private fun drainRequests(count: Int): List<RecordedRequest> =
         buildList {
             repeat(count) {
-                server.takeRequest(5, TimeUnit.SECONDS) ?: error("预期 $count 个请求，实际只收到 $size 个")
+                add(server.takeRequest(5, TimeUnit.SECONDS) ?: error("预期 $count 个请求，实际只收到 $size 个"))
             }
         }
 
@@ -210,43 +213,42 @@ class AppOrchestrationTest {
 
     @Test
     fun completionCommandFallsBackToDirectSendWhenPlaceholderFails() {
-        server.dispatcher =
-            object : Dispatcher() {
-                override fun dispatch(request: RecordedRequest): MockResponse =
-                    when {
-                        !request.path!!.endsWith("/sendMessage") -> {
-                            json(MESSAGE_BODY)
-                        }
-
-                        request.body.readUtf8().contains("placeholder") -> {
-                            json("""{"ok":false,"error_code":400,"description":"Bad Request: test failure"}""")
-                        }
-
-                        else -> {
-                            json(MESSAGE_BODY)
-                        }
+        val dispatcher =
+            RecordingDispatcher { path, body ->
+                when {
+                    path.endsWith("/chat/completions") -> {
+                        json(COMPLETION_BODY)
                     }
+
+                    !path.endsWith("/sendMessage") -> {
+                        json(MESSAGE_BODY)
+                    }
+
+                    body.contains("placeholder") -> {
+                        json(FAILURE_BODY)
+                    }
+
+                    else -> {
+                        json(MESSAGE_BODY)
+                    }
+                }
             }
+        server.dispatcher = dispatcher
 
-        App.handleMessage(bot, completionMessage(user()), config, commands)
+        App.handleMessage(bot, completionMessage(user(), chatId = WHITELISTED_CHAT_ID), config, commands)
 
-        val requests = drainRequests(5)
+        awaitRecorded(dispatcher, 6)
 
-        assertEquals(5, requests.count { it.path!!.endsWith("/sendMessage") })
-        assertEquals(0, requests.count { it.path!!.endsWith("/editMessageText") })
-        assertTrue(
-            requests
-                .last()
-                .body
-                .readUtf8()
-                .contains("模型回复"),
-        )
+        val sends = dispatcher.recorded.filter { it.first.endsWith("/sendMessage") }
+        assertEquals(5, sends.size)
+        assertEquals(0, dispatcher.recorded.count { it.first.endsWith("/editMessageText") })
+        assertTrue(sends.last().second.contains("模型回复"))
     }
 
     @Test
     fun completionCommandSendsRateLimitTextWhenExceeded() {
         val from = user()
-        val message = completionMessage(from)
+        val message = completionMessage(from, chatId = WHITELISTED_CHAT_ID)
 
         repeat(11) { App.handleMessage(bot, message, config, commands) }
 

@@ -45,15 +45,12 @@ class TelegramApiRetryTest {
             .setHeader("Content-Type", "application/json")
             .setBody(FAILURE_BODY)
 
-    private fun dispatchByBody(rule: (String) -> MockResponse) =
-        object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse = rule(request.body.readUtf8())
-        }
+    private fun dispatchByBody(rule: (String) -> MockResponse): RecordingDispatcher = RecordingDispatcher { _, body -> rule(body) }
 
     private fun drainRequests(count: Int): List<RecordedRequest> =
         buildList {
             repeat(count) {
-                server.takeRequest(5, TimeUnit.SECONDS) ?: error("预期 $count 个请求，实际只收到 $size 个")
+                add(server.takeRequest(5, TimeUnit.SECONDS) ?: error("预期 $count 个请求，实际只收到 $size 个"))
             }
         }
 
@@ -143,21 +140,21 @@ class TelegramApiRetryTest {
         }
 
     @Test
-    fun sendMarkdownWithRetryFallsBackToPlainTextAfterFourMarkdownFailures() =
+    fun sendMarkdownChunkedFallsBackToPlainTextAfterFourMarkdownFailures() =
         runBlocking {
             server.dispatcher =
                 dispatchByBody { body ->
                     if (body.contains("MarkdownV2")) failure() else okMessage()
                 }
 
-            TelegramApi.sendMarkdownWithRetry(
-                bot = bot,
-                chatId = CHAT_ID,
-                text = MarkdownV2.escape("hello world"),
-                fallbackContent = "hello world",
-            )
+            TelegramApi.sendMarkdownChunked(bot = bot, chatId = CHAT_ID, content = "hello world")
 
-            val bodies = drainRequests(5).map { it.body.readUtf8() }
+            val bodies =
+                server.dispatcher
+                    .let { it as RecordingDispatcher }
+                    .recorded
+                    .map { it.second }
+            assertEquals(5, bodies.size)
             assertEquals(4, bodies.count { it.contains("MarkdownV2") })
             assertTrue(bodies.last().contains("hello world"))
         }
@@ -178,7 +175,12 @@ class TelegramApiRetryTest {
                 fallbackContent = "hello world",
             )
 
-            val bodies = drainRequests(5).map { it.body.readUtf8() }
+            val bodies =
+                server.dispatcher
+                    .let { it as RecordingDispatcher }
+                    .recorded
+                    .map { it.second }
+            assertEquals(5, bodies.size)
             assertEquals(4, bodies.count { it.contains("MarkdownV2") })
             assertTrue(bodies.last().contains("hello world"))
         }
@@ -276,7 +278,7 @@ class TelegramApiRetryTest {
         }
 
     @Test
-    fun getFileDataUrlReturnsNullAfterFourFailures() =
+    fun getFileDataUrlReturnsNullAfterMaxAttempts() =
         runBlocking {
             server.dispatcher =
                 object : Dispatcher() {
@@ -286,6 +288,6 @@ class TelegramApiRetryTest {
             val dataUrl = TelegramApi.getFileDataUrl(bot = bot, file = FileRef("jpeg", "f"))
 
             assertNull(dataUrl)
-            assertEquals(4, server.requestCount)
+            assertEquals(3, server.requestCount)
         }
 }
