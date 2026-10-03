@@ -290,4 +290,37 @@ class TelegramApiRetryTest {
             assertNull(dataUrl)
             assertEquals(3, server.requestCount)
         }
+
+    @Test
+    fun getFileDataUrlPrefersSniffedMimeOverHint() =
+        runBlocking {
+            val pngBytes = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00)
+            server.dispatcher =
+                object : Dispatcher() {
+                    override fun dispatch(request: RecordedRequest): MockResponse =
+                        when {
+                            request.path!!.endsWith("/getFile") -> {
+                                MockResponse()
+                                    .setHeader("Content-Type", "application/json")
+                                    .setBody(
+                                        """{"ok":true,"result":{"file_id":"f","file_unique_id":"u",""" +
+                                            """"file_path":"stickers/sticker.png"}}""",
+                                    )
+                            }
+
+                            request.path!!.endsWith("/stickers/sticker.png") -> {
+                                MockResponse().setBody(Buffer().write(pngBytes))
+                            }
+
+                            else -> {
+                                failure()
+                            }
+                        }
+                }
+
+            val dataUrl = TelegramApi.getFileDataUrl(bot = bot, file = FileRef("webp", "f"))
+
+            assertEquals("data:image/png;base64," + Base64.getEncoder().encodeToString(pngBytes), dataUrl)
+            assertEquals(2, server.requestCount)
+        }
 }

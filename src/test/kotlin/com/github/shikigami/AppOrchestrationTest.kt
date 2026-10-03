@@ -16,6 +16,10 @@ import eu.vendeli.tgbot.types.chat.ChatType
 import eu.vendeli.tgbot.types.msg.EntityType
 import eu.vendeli.tgbot.types.msg.Message
 import eu.vendeli.tgbot.types.msg.MessageEntity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -28,20 +32,20 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 class AppOrchestrationTest {
     private lateinit var server: MockWebServer
     private lateinit var bot: TelegramBot
     private lateinit var config: BotConfig
     private lateinit var commands: Map<String, Config.BotCommand>
+    private lateinit var appJob: Job
+    private lateinit var app: App
 
     private companion object {
         const val TOKEN = "1:test-token"
         const val ADMIN_CHAT_ID = 9L
         const val WHITELISTED_CHAT_ID = -100L
-
-        // App 的限流器是单例，用户 ID 必须跨测试唯一，否则会互相污染限流状态
-        var nextUserId = 100L
 
         val MESSAGE_BODY =
             """{"ok":true,"result":{"message_id":555,"date":1,"chat":{"id":42,"type":"private"}}}"""
@@ -75,7 +79,7 @@ class AppOrchestrationTest {
             }
         }
 
-    private fun user() = User(id = nextUserId++, isBot = false, firstName = "User")
+    private fun user() = User(id = 1L, isBot = false, firstName = "User")
 
     private fun startMessage(from: User): Message =
         Message(
@@ -145,16 +149,21 @@ class AppOrchestrationTest {
                 token = TOKEN,
                 username = "mybot",
             )
+
+        appJob = SupervisorJob()
+        app = App(Dispatchers.IO + appJob)
     }
 
     @AfterTest
     fun tearDown() {
+        runBlocking { awaitPendingWork(appJob, 5.seconds) }
+        appJob.cancel()
         server.shutdown()
     }
 
     @Test
     fun startCommandRepliesWithStartText() {
-        App.handleMessage(bot, startMessage(user()), config, commands)
+        app.handleMessage(bot, startMessage(user()), config, commands)
 
         val request = drainRequests(1).single()
 
@@ -167,8 +176,8 @@ class AppOrchestrationTest {
         val from = user()
         val message = startMessage(from)
 
-        App.handleMessage(bot, message, config, commands)
-        App.handleMessage(bot, message, config, commands)
+        app.handleMessage(bot, message, config, commands)
+        app.handleMessage(bot, message, config, commands)
 
         assertNotNull(server.takeRequest(5, TimeUnit.SECONDS))
         assertNull(server.takeRequest(500, TimeUnit.MILLISECONDS))
@@ -177,7 +186,7 @@ class AppOrchestrationTest {
     @Test
     fun completionCommandSendsPlaceholderThenEditsWithModelReply() {
         val whitelistedChatUser = user()
-        App.handleMessage(
+        app.handleMessage(
             bot,
             completionMessage(whitelistedChatUser, chatId = WHITELISTED_CHAT_ID),
             config,
@@ -201,7 +210,7 @@ class AppOrchestrationTest {
 
     @Test
     fun completionCommandReportsNonWhitelistedChatToAdmin() {
-        App.handleMessage(bot, completionMessage(user(), chatId = 888L), config, commands)
+        app.handleMessage(bot, completionMessage(user(), chatId = 888L), config, commands)
 
         val requests = drainRequests(4)
         val sendBodies = requests.filter { it.path!!.endsWith("/sendMessage") }.map { it.body.readUtf8() }
@@ -235,7 +244,7 @@ class AppOrchestrationTest {
             }
         server.dispatcher = dispatcher
 
-        App.handleMessage(bot, completionMessage(user(), chatId = WHITELISTED_CHAT_ID), config, commands)
+        app.handleMessage(bot, completionMessage(user(), chatId = WHITELISTED_CHAT_ID), config, commands)
 
         awaitRecorded(dispatcher, 6)
 
@@ -250,7 +259,7 @@ class AppOrchestrationTest {
         val from = user()
         val message = completionMessage(from, chatId = WHITELISTED_CHAT_ID)
 
-        repeat(11) { App.handleMessage(bot, message, config, commands) }
+        repeat(11) { app.handleMessage(bot, message, config, commands) }
 
         val requests = drainRequests(31)
         val sendBodies = requests.filter { it.path!!.endsWith("/sendMessage") }.map { it.body.readUtf8() }
@@ -262,7 +271,7 @@ class AppOrchestrationTest {
 
     @Test
     fun completionCommandWithoutPromptIsIgnored() {
-        App.handleMessage(bot, completionMessage(user(), prompt = ""), config, commands)
+        app.handleMessage(bot, completionMessage(user(), prompt = ""), config, commands)
 
         assertNull(server.takeRequest(500, TimeUnit.MILLISECONDS))
     }
@@ -279,7 +288,7 @@ class AppOrchestrationTest {
                     }
             }
 
-        App.handleMessage(bot, completionMessage(user(), chatId = WHITELISTED_CHAT_ID), config, commands)
+        app.handleMessage(bot, completionMessage(user(), chatId = WHITELISTED_CHAT_ID), config, commands)
 
         val requests = drainRequests(3)
         val edit = requests.first { it.path!!.endsWith("/editMessageText") }
@@ -303,7 +312,7 @@ class AppOrchestrationTest {
                 text = " 你好",
             )
 
-        assertEquals("report\nFoo Bar（@hoge）：\n/native 你好", App.buildAdminReport(parsed, config))
+        assertEquals("report\nFoo Bar（@hoge）：\n/native 你好", app.buildAdminReport(parsed, config))
     }
 
     @Test
@@ -322,6 +331,6 @@ class AppOrchestrationTest {
                 text = " 你好",
             )
 
-        assertEquals("report\nFoo：\n/native 你好", App.buildAdminReport(parsed, config))
+        assertEquals("report\nFoo：\n/native 你好", app.buildAdminReport(parsed, config))
     }
 }

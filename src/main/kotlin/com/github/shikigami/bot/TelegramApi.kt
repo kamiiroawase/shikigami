@@ -275,6 +275,33 @@ object TelegramApi {
 
     internal fun unescapeMarkdownV2(text: String): String = markdownV2EscapedCharRegex.replace(text) { it.groupValues[1] }
 
+    // Telegram API 不返回文件 MIME（photo 不一定是 jpeg，静态贴纸可能是 webp 或 png），
+    // 因此以下载内容的文件头为准，识别失败时回退到 FileRef 中的提示值
+    internal fun sniffImageMime(bytes: ByteArray): String? =
+        when {
+            bytes.matches(0, 0xFF, 0xD8, 0xFF) -> "jpeg"
+
+            bytes.matches(0, 0x89, 0x50, 0x4E, 0x47) -> "png"
+
+            bytes.matches(0, 0x47, 0x49, 0x46) -> "gif"
+
+            bytes.matches(8, 0x57, 0x45, 0x42, 0x50) -> "webp"
+
+            // "WEBP" 位于 RIFF 头（8 字节）之后
+            else -> null
+        }
+
+    private fun ByteArray.matches(
+        offset: Int,
+        vararg magic: Int,
+    ): Boolean {
+        if (size < offset + magic.size) {
+            return false
+        }
+
+        return magic.indices.all { this[offset + it] == magic[it].toByte() }
+    }
+
     suspend fun getFileDataUrl(
         bot: TelegramBot,
         file: FileRef,
@@ -296,7 +323,7 @@ object TelegramApi {
                 val bytes = remote?.let { bot.getFileContent(it) }
 
                 if (bytes != null) {
-                    "data:image/${file.mimeType};base64," +
+                    "data:image/${sniffImageMime(bytes) ?: file.mimeType};base64," +
                         Base64.getEncoder().encodeToString(bytes)
                 } else {
                     log.warn("获取文件内容失败（第 {} 次尝试，fileId={}）", attempt + 1, file.fileId)

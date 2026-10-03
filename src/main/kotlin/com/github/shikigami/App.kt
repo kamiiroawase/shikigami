@@ -30,91 +30,15 @@ import org.slf4j.LoggerFactory
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-object App : CoroutineScope {
-    private val log: Logger = LoggerFactory.getLogger(App::class.java)
-
-    private val appJob = SupervisorJob()
-
-    override val coroutineContext =
-        Dispatchers.IO + appJob +
-            CoroutineExceptionHandler { _, throwable ->
-                log.error("协程中未捕获的异常", throwable)
-            }
-
-    private val shutdownGracePeriod = 30.seconds
-
-    private val shutdownRequested = AtomicBoolean(false)
-
-    private val startLimiter = RateLimiter(maxCount = 1)
-    private val completionLimiter = RateLimiter(maxCount = 10)
-
-    @JvmStatic
-    fun main(args: Array<String>) {
-        val config = Config.botConfig
-
-        val bot =
-            TelegramBot(token = config.token) {
-                httpClient {
-                    proxy =
-                        config.proxy?.let {
-                            Proxy(Proxy.Type.HTTP, InetSocketAddress(it.hostname, it.port))
-                        }
-                    connectTimeoutMillis = 10_000L
-                    socketTimeoutMillis = 35_000L
-                    requestTimeoutMillis = 60_000L
-                }
-            }
-
-        // JVM 在所有 shutdown hook 返回后即退出，因此等待在途任务必须在 hook 内完成
-        Runtime.getRuntime().addShutdownHook(
-            Thread(
-                {
-                    log.info("收到停机信号，停止接收新更新")
-                    shutdownRequested.set(true)
-                    bot.update.stopListener()
-
-                    val drained = runBlocking { awaitPendingWork(appJob, shutdownGracePeriod) }
-
-                    if (drained) {
-                        log.info("进行中的任务已全部完成，停机完毕")
-                    } else {
-                        log.warn("等待进行中的任务超时（{}），强制取消剩余任务", shutdownGracePeriod)
-                        appJob.cancel()
-                    }
-                },
-                "graceful-shutdown",
-            ),
-        )
-
-        runBlocking {
-            bot.setFunctionality {
-                onUpdate(UpdateType.MESSAGE) {
-                    val raw = (update as? MessageUpdate)?.message ?: return@onUpdate
-
-                    handleMessage(bot, raw, config)
-                }
-            }
-
-            val retryAfter = 5
-
-            while (!shutdownRequested.get()) {
-                try {
-                    bot.handleUpdates()
-                    log.info("更新监听已停止，退出主循环")
-                    break
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    log.error("处理 Telegram 更新失败，$retryAfter 秒后重试", e)
-                    delay(retryAfter.seconds)
-                }
-            }
-        }
-    }
-
+class App(
+    override val coroutineContext: CoroutineContext,
+    private val startLimiter: RateLimiter = RateLimiter(maxCount = 1),
+    private val completionLimiter: RateLimiter = RateLimiter(maxCount = 10),
+) : CoroutineScope {
     internal fun handleMessage(
         bot: TelegramBot,
         raw: Message,
@@ -302,6 +226,89 @@ object App : CoroutineScope {
             lastName +
             username +
             parsed.originalText
+    }
+
+    companion object {
+        private val log: Logger = LoggerFactory.getLogger(App::class.java)
+
+        private val shutdownGracePeriod = 30.seconds
+
+        @JvmStatic
+        fun main(args: Array<String>) {
+            val config = Config.botConfig
+
+            val bot =
+                TelegramBot(token = config.token) {
+                    httpClient {
+                        proxy =
+                            config.proxy?.let {
+                                Proxy(Proxy.Type.HTTP, InetSocketAddress(it.hostname, it.port))
+                            }
+                        connectTimeoutMillis = 10_000L
+                        socketTimeoutMillis = 35_000L
+                        requestTimeoutMillis = 60_000L
+                    }
+                }
+
+            val appJob = SupervisorJob()
+
+            val app =
+                App(
+                    coroutineContext =
+                        Dispatchers.IO + appJob +
+                            CoroutineExceptionHandler { _, throwable ->
+                                log.error("协程中未捕获的异常", throwable)
+                            },
+                )
+
+            val shutdownRequested = AtomicBoolean(false)
+
+            // JVM 在所有 shutdown hook 返回后即退出，因此等待在途任务必须在 hook 内完成
+            Runtime.getRuntime().addShutdownHook(
+                Thread(
+                    {
+                        log.info("收到停机信号，停止接收新更新")
+                        shutdownRequested.set(true)
+                        bot.update.stopListener()
+
+                        val drained = runBlocking { awaitPendingWork(appJob, shutdownGracePeriod) }
+
+                        if (drained) {
+                            log.info("进行中的任务已全部完成，停机完毕")
+                        } else {
+                            log.warn("等待进行中的任务超时（{}），强制取消剩余任务", shutdownGracePeriod)
+                            appJob.cancel()
+                        }
+                    },
+                    "graceful-shutdown",
+                ),
+            )
+
+            runBlocking {
+                bot.setFunctionality {
+                    onUpdate(UpdateType.MESSAGE) {
+                        val raw = (update as? MessageUpdate)?.message ?: return@onUpdate
+
+                        app.handleMessage(bot, raw, config)
+                    }
+                }
+
+                val retryAfter = 5
+
+                while (!shutdownRequested.get()) {
+                    try {
+                        bot.handleUpdates()
+                        log.info("更新监听已停止，退出主循环")
+                        break
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        log.error("处理 Telegram 更新失败，$retryAfter 秒后重试", e)
+                        delay(retryAfter.seconds)
+                    }
+                }
+            }
+        }
     }
 }
 
