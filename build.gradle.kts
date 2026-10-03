@@ -7,7 +7,6 @@ plugins {
 
 repositories {
     mavenCentral()
-    maven("https://jitpack.io")
 }
 
 spotless {
@@ -31,7 +30,7 @@ dependencies {
     implementation(platform(libs.openai.client.bom))
     implementation(libs.openai.client)
     implementation(libs.slf4j.simple)
-    implementation(libs.telegram.markdownv2.jvm)
+    implementation(libs.telegram.markdownv2)
     implementation(libs.vendeli.telegram.bot)
 
     runtimeOnly(libs.ktor.client.okhttp)

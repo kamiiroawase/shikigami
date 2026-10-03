@@ -1,10 +1,10 @@
 package com.github.shikigami
 
-import com.github.kamiiroawase.markdownv2.MarkdownV2
 import com.github.shikigami.bot.TelegramApi
 import com.github.shikigami.model.FileRef
 import eu.vendeli.tgbot.TelegramBot
 import eu.vendeli.tgbot.types.msg.Message
+import io.github.kamiiroawase.markdownv2.MarkdownV2
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -157,6 +157,33 @@ class TelegramApiRetryTest {
             assertEquals(5, bodies.size)
             assertEquals(4, bodies.count { it.contains("MarkdownV2") })
             assertTrue(bodies.last().contains("hello world"))
+        }
+
+    @Test
+    fun sendMarkdownChunkedFallsBackToDeformattedPlainText() =
+        runBlocking {
+            server.dispatcher =
+                dispatchByBody { body ->
+                    if (body.contains("MarkdownV2")) failure() else okMessage()
+                }
+
+            TelegramApi.sendMarkdownChunked(
+                bot = bot,
+                chatId = CHAT_ID,
+                content = "**加粗** 与 [链接](https://example.com/path)",
+            )
+
+            val bodies =
+                server.dispatcher
+                    .let { it as RecordingDispatcher }
+                    .recorded
+                    .map { it.second }
+            assertEquals(5, bodies.size)
+            assertEquals(4, bodies.count { it.contains("MarkdownV2") })
+            val fallback = bodies.last()
+            assertTrue(fallback.contains("加粗 与 链接 (https://example.com/path)"))
+            assertFalse(fallback.contains("*"))
+            assertFalse(fallback.contains("[链接]"))
         }
 
     @Test

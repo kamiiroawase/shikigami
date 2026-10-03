@@ -7,6 +7,7 @@ import com.aallam.openai.client.LoggingConfig
 import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.OpenAIConfig
 import com.aallam.openai.client.OpenAIHost
+import com.aallam.openai.client.RetryStrategy
 import com.github.shikigami.model.BotConfig
 import com.github.shikigami.model.ProxyConfig
 import java.io.FileInputStream
@@ -115,6 +116,8 @@ object Config {
                 logging = LoggingConfig(logLevel = LogLevel.None),
                 token = props.getProperty("openai.provider.$provider.token").orEmpty(),
                 host = OpenAIHost(props.getProperty("openai.provider.$provider.host").orEmpty()),
+                // 上层调用失败后直接兜底为错误文案，库内重试只会在 360s 超时上叠加等待
+                retry = RetryStrategy(maxRetries = 0),
             ),
         )
 

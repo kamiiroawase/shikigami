@@ -1,6 +1,5 @@
 package com.github.shikigami.bot
 
-import com.github.kamiiroawase.markdownv2.MarkdownV2
 import com.github.shikigami.model.FileRef
 import eu.vendeli.tgbot.TelegramBot
 import eu.vendeli.tgbot.api.media.getFile
@@ -10,6 +9,7 @@ import eu.vendeli.tgbot.types.common.ReplyParameters
 import eu.vendeli.tgbot.types.component.ParseMode
 import eu.vendeli.tgbot.types.component.onFailure
 import eu.vendeli.tgbot.types.msg.Message
+import io.github.kamiiroawase.markdownv2.MarkdownV2
 import kotlinx.coroutines.CancellationException
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -17,8 +17,6 @@ import java.util.Base64
 
 object TelegramApi {
     private val log: Logger = LoggerFactory.getLogger(TelegramApi::class.java)
-
-    private val markdownV2EscapedCharRegex = Regex("""\\([_*\[\]()~`>#+\-=|{}.!\\])""")
 
     internal const val MAX_MESSAGE_LENGTH = 4096
 
@@ -87,7 +85,7 @@ object TelegramApi {
                 chatId = chatId,
                 text = chunk,
                 replyParams = replyParams,
-                fallbackContent = unescapeMarkdownV2(chunk),
+                fallbackContent = MarkdownV2.toPlainText(chunk),
             )
         }
     }
@@ -272,8 +270,6 @@ object TelegramApi {
 
         return text.take(end) + "…"
     }
-
-    internal fun unescapeMarkdownV2(text: String): String = markdownV2EscapedCharRegex.replace(text) { it.groupValues[1] }
 
     // Telegram API 不返回文件 MIME（photo 不一定是 jpeg，静态贴纸可能是 webp 或 png），
     // 因此以下载内容的文件头为准，识别失败时回退到 FileRef 中的提示值
