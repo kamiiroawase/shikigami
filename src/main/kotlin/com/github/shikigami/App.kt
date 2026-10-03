@@ -228,7 +228,13 @@ object App : CoroutineScope {
             val placeholder = placeholderMessage.await()
 
             if (placeholder == null) {
-                log.error("占位消息发送失败，丢弃本次回复（chatId={}）", parsed.chat.id)
+                log.warn("占位消息发送失败，降级为直接发送回复（chatId={}）", parsed.chat.id)
+                TelegramApi.sendMarkdownChunked(
+                    bot = bot,
+                    chatId = parsed.chat.id,
+                    content = content,
+                    replyParams = ReplyParameters(parsed.messageId),
+                )
             } else {
                 TelegramApi.replyMarkdownChunked(
                     bot = bot,

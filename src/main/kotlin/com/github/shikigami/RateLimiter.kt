@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit
 
 class RateLimiter(
     private val maxCount: Int,
+    private val clock: () -> Long = System::nanoTime,
 ) {
     private val windowNanos = TimeUnit.MILLISECONDS.toNanos(60_000)
     private val expireNanos = TimeUnit.MILLISECONDS.toNanos(60_000)
@@ -28,7 +29,7 @@ class RateLimiter(
         var allowed = false
 
         windows.compute(key) { _, existing ->
-            val now = System.nanoTime()
+            val now = clock()
 
             val window = existing ?: FixedWindow(maxCount, windowNanos, now)
 
@@ -41,7 +42,7 @@ class RateLimiter(
     }
 
     private fun sweep() {
-        val now = System.nanoTime()
+        val now = clock()
 
         for (key in windows.keys) {
             windows.computeIfPresent(key) { _, window ->

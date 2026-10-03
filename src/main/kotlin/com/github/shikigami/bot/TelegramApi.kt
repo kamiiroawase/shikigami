@@ -18,6 +18,8 @@ import java.util.Base64
 object TelegramApi {
     private val log: Logger = LoggerFactory.getLogger(TelegramApi::class.java)
 
+    private val markdownV2EscapedCharRegex = Regex("""\\([_*\[\]()~`>#+\-=|{}.!\\])""")
+
     internal const val MAX_MESSAGE_LENGTH = 4096
 
     suspend fun replyMarkdownChunked(
@@ -48,8 +50,45 @@ object TelegramApi {
             fallbackContent = content,
         )
 
-        chunks.drop(1).forEach { chunk ->
-            sendMarkdownWithRetry(bot = bot, chatId = chatId, text = chunk, replyParams = replyParams)
+        sendChunks(bot = bot, chatId = chatId, chunks = chunks.drop(1), replyParams = replyParams)
+    }
+
+    suspend fun sendMarkdownChunked(
+        bot: TelegramBot,
+        chatId: Long,
+        content: String,
+        replyParams: ReplyParameters? = null,
+    ) {
+        val chunks = MarkdownV2.renderChunked(content)
+
+        if (chunks.isEmpty()) {
+            sendMarkdownWithRetry(
+                bot = bot,
+                chatId = chatId,
+                text = MarkdownV2.escape(content),
+                replyParams = replyParams,
+                fallbackContent = content,
+            )
+            return
+        }
+
+        sendChunks(bot = bot, chatId = chatId, chunks = chunks, replyParams = replyParams)
+    }
+
+    private suspend fun sendChunks(
+        bot: TelegramBot,
+        chatId: Long,
+        chunks: List<String>,
+        replyParams: ReplyParameters? = null,
+    ) {
+        chunks.forEach { chunk ->
+            sendMarkdownWithRetry(
+                bot = bot,
+                chatId = chatId,
+                text = chunk,
+                replyParams = replyParams,
+                fallbackContent = unescapeMarkdownV2(chunk),
+            )
         }
     }
 
@@ -58,6 +97,7 @@ object TelegramApi {
         chatId: Long,
         text: String,
         replyParams: ReplyParameters? = null,
+        fallbackContent: String = text,
         attempt: Int = 0,
     ) {
         val action =
@@ -89,9 +129,17 @@ object TelegramApi {
             }
 
         if (sent == null && attempt < 3) {
-            sendMarkdownWithRetry(bot = bot, chatId = chatId, text = text, replyParams = replyParams, attempt = attempt + 1)
+            sendMarkdownWithRetry(
+                bot = bot,
+                chatId = chatId,
+                text = text,
+                replyParams = replyParams,
+                fallbackContent = fallbackContent,
+                attempt = attempt + 1,
+            )
         } else if (sent == null) {
-            log.error("发送 Markdown 消息连续 {} 次失败，已放弃（chatId={}）", attempt + 1, chatId)
+            log.warn("Markdown 消息连续 {} 次发送失败，回退为纯文本（chatId={}）", attempt + 1, chatId)
+            sendMessageWithRetry(bot = bot, chatId = chatId, text = fallbackContent, replyParams = replyParams)
         }
     }
 
@@ -224,6 +272,8 @@ object TelegramApi {
 
         return text.take(end) + "…"
     }
+
+    internal fun unescapeMarkdownV2(text: String): String = markdownV2EscapedCharRegex.replace(text) { it.groupValues[1] }
 
     suspend fun getFileDataUrl(
         bot: TelegramBot,
