@@ -1,8 +1,6 @@
 package com.github.shikigami
 
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
 class RateLimiter(
@@ -14,18 +12,9 @@ class RateLimiter(
 
     private val windows = ConcurrentHashMap<String, FixedWindow>()
 
-    companion object {
-        private val sweeper: ScheduledExecutorService =
-            Executors.newSingleThreadScheduledExecutor { runnable ->
-                Thread(runnable, "rate-limiter-sweeper").apply { isDaemon = true }
-            }
-    }
-
-    init {
-        sweeper.scheduleAtFixedRate(::sweep, expireNanos, expireNanos, TimeUnit.NANOSECONDS)
-    }
-
     fun allow(key: String): Boolean {
+        sweep()
+
         var allowed = false
 
         windows.compute(key) { _, existing ->

@@ -158,6 +158,29 @@ class MessageParserTest {
     }
 
     @Test
+    fun returnsNullWhenCommandIsNotAtMessageStart() {
+        val mentionOnly =
+            message(
+                text = "你好 /native 写首诗",
+                entities = listOf(commandEntity(offset = 3, length = "/native".length)),
+            )
+
+        assertNull(MessageParser.parse(mentionOnly, config()))
+    }
+
+    @Test
+    fun returnsNullWhenCommandIsNotAtCaptionStart() {
+        val photoMessage =
+            message(
+                caption = "看图 /native",
+                captionEntities = listOf(commandEntity(offset = 3, length = "/native".length)),
+                photo = listOf(photo("photo-file")),
+            )
+
+        assertNull(MessageParser.parse(photoMessage, config()))
+    }
+
+    @Test
     fun ignoresCommandTargetingOtherBot() {
         assertNull(MessageParser.parse(commandMessage("/native@otherbot"), config()))
     }
@@ -314,6 +337,19 @@ class MessageParserTest {
         val parsed = MessageParser.parse(commandMessage("/native", replyToMessage = reply), config())!!
 
         assertEquals(" 写诗", parsed.replyToMessageText)
+    }
+
+    @Test
+    fun keepsReplyTextWhenReplyOnlyMentionsCommand() {
+        val reply =
+            message(
+                text = "看看 /native 这个",
+                entities = listOf(commandEntity(offset = 3, length = "/native".length)),
+            )
+
+        val parsed = MessageParser.parse(commandMessage("/native", replyToMessage = reply), config())!!
+
+        assertEquals("看看 /native 这个", parsed.replyToMessageText)
     }
 
     @Test

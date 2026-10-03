@@ -3,6 +3,7 @@ services:
     image: amazoncorretto:21.0.12-alpine3.24
     command: ./gradlew run
     working_dir: /app
+    stop_grace_period: 40s
     volumes:
       - .:/app
       - ./.docker/.gradle:/root/.gradle

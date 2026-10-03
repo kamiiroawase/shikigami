@@ -39,6 +39,7 @@ dependencies {
     ksp(libs.vendeli.ktnip)
 
     testImplementation(libs.kotlin.test)
+    testImplementation(libs.mockwebserver)
 }
 
 application {

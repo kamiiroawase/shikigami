@@ -10,7 +10,7 @@
 - **MarkdownV2 渲染**：将模型输出的 CommonMark（含 GFM 表格、删除线）转换为 Telegram MarkdownV2 并做特殊字符转义；超长内容分段截断，编辑失败时回退为纯文本。
 - **限流**：基于用户 ID 的 60 秒固定窗口限流——补全命令 10 次/分钟，`/start` 1 次/分钟。
 - **权限控制与审计**：群聊仅响应白名单内的 chat id，私聊全放行；非白名单用户触发补全时，机器人会把消息原文转发给管理员。
-- **健壮性**：Telegram API 调用自带重试（发送/编辑最多 3 次、文件下载最多 3 次）；主循环异常自动延迟 5 秒后重试；支持为 Telegram 配置 HTTP 代理。
+- **健壮性**：Telegram API 调用自带重试（发送/编辑最多 3 次、文件下载最多 3 次）；主循环异常自动延迟 5 秒后重试；收到 SIGTERM/SIGINT 后优雅停机（停止接收新更新，等待进行中的补全任务最多 30 秒，超时则强制取消）；支持为 Telegram 配置 HTTP 代理。
 
 ## 命令一览
 
@@ -60,6 +60,8 @@
 ```bash
 docker compose up -d
 ```
+
+容器配置了 `stop_grace_period: 40s`，`docker stop` 时为优雅停机的 30 秒宽限期留足时间。
 
 Gradle 缓存挂载到 `.docker/.gradle`，该目录已在 `.gitignore` 中忽略。
 

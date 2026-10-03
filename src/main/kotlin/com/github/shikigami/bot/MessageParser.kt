@@ -18,8 +18,8 @@ object MessageParser {
         val text = message.text ?: message.caption ?: return null
 
         val commandEntity =
-            message.entities?.firstOrNull { it.type == EntityType.BotCommand }
-                ?: message.captionEntities?.firstOrNull { it.type == EntityType.BotCommand }
+            message.entities?.firstOrNull { it.type == EntityType.BotCommand && it.offset == 0 }
+                ?: message.captionEntities?.firstOrNull { it.type == EntityType.BotCommand && it.offset == 0 }
                 ?: return null
 
         if (from.isBot) {
@@ -48,8 +48,8 @@ object MessageParser {
                 ?.let { it.text ?: it.caption ?: "" }
 
         val replyToCommandEntity =
-            message.replyToMessage?.entities?.firstOrNull { it.type == EntityType.BotCommand }
-                ?: message.replyToMessage?.captionEntities?.firstOrNull { it.type == EntityType.BotCommand }
+            message.replyToMessage?.entities?.firstOrNull { it.type == EntityType.BotCommand && it.offset == 0 }
+                ?: message.replyToMessage?.captionEntities?.firstOrNull { it.type == EntityType.BotCommand && it.offset == 0 }
 
         if (replyToCommandEntity != null) {
             replyToMessageText =
