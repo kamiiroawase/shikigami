@@ -21,6 +21,7 @@ object TelegramApi {
         chatId: Long,
         content: String,
         placeholderMessageId: Long,
+        replyParams: ReplyParameters? = null,
     ) {
         val chunks = MarkdownV2.renderChunked(content)
 
@@ -44,7 +45,7 @@ object TelegramApi {
         )
 
         chunks.drop(1).forEach { chunk ->
-            sendMarkdownWithRetry(bot = bot, chatId = chatId, text = chunk)
+            sendMarkdownWithRetry(bot = bot, chatId = chatId, text = chunk, replyParams = replyParams)
         }
     }
 
@@ -52,16 +53,23 @@ object TelegramApi {
         bot: TelegramBot,
         chatId: Long,
         text: String,
+        replyParams: ReplyParameters? = null,
         attempt: Int = 0,
     ) {
-        val sent =
-            message(text)
-                .options { parseMode = ParseMode.MarkdownV2 }
-                .sendReturning(chatId, bot)
-                .getOrNull()
+        val action =
+            message(text).apply {
+                options {
+                    parseMode = ParseMode.MarkdownV2
+                    if (replyParams != null) {
+                        replyParameters = replyParams
+                    }
+                }
+            }
+
+        val sent = action.sendReturning(chatId, bot).getOrNull()
 
         if (sent == null && attempt < 3) {
-            sendMarkdownWithRetry(bot = bot, chatId = chatId, text = text, attempt = attempt + 1)
+            sendMarkdownWithRetry(bot = bot, chatId = chatId, text = text, replyParams = replyParams, attempt = attempt + 1)
         }
     }
 

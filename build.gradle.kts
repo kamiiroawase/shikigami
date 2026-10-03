@@ -28,8 +28,8 @@ spotless {
 }
 
 dependencies {
-    implementation(libs.openai.client)
     implementation(platform(libs.openai.client.bom))
+    implementation(libs.openai.client)
     implementation(libs.slf4j.simple)
     implementation(libs.telegram.markdownv2.jvm)
     implementation(libs.vendeli.telegram.bot)

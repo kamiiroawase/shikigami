@@ -217,6 +217,7 @@ object App : CoroutineScope {
                     chatId = it.chat.id,
                     content = content,
                     placeholderMessageId = it.messageId,
+                    replyParams = ReplyParameters(parsed.messageId),
                 )
             }
         }
