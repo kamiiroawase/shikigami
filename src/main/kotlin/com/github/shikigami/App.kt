@@ -14,6 +14,7 @@ import eu.vendeli.tgbot.types.component.UpdateType
 import eu.vendeli.tgbot.types.msg.Message
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,12 +22,20 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.net.InetSocketAddress
 import java.net.Proxy
-import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 object App : CoroutineScope {
-    override val coroutineContext = Dispatchers.IO + SupervisorJob()
+    private val log: Logger = LoggerFactory.getLogger(App::class.java)
+
+    override val coroutineContext =
+        Dispatchers.IO + SupervisorJob() +
+            CoroutineExceptionHandler { _, throwable ->
+                log.error("协程中未捕获的异常", throwable)
+            }
 
     private val startLimiter = RateLimiter(maxCount = 1)
     private val completionLimiter = RateLimiter(maxCount = 10)
@@ -57,13 +66,16 @@ object App : CoroutineScope {
                 }
             }
 
+            val retryAfter = 5
+
             while (true) {
                 try {
                     bot.handleUpdates()
                 } catch (e: CancellationException) {
                     throw e
-                } catch (_: Exception) {
-                    delay(5000.milliseconds)
+                } catch (e: Exception) {
+                    log.error("处理 Telegram 更新失败，$retryAfter 秒后重试", e)
+                    delay(retryAfter.seconds)
                 }
             }
         }
@@ -198,6 +210,7 @@ object App : CoroutineScope {
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
+                            log.error("LLM 调用失败（model={}）", command.model.id, e)
                             e.message?.let {
                                 config.errorMessageText + it
                             } ?: config.errorUnknownText
@@ -207,16 +220,21 @@ object App : CoroutineScope {
                     }
                 } catch (e: CancellationException) {
                     throw e
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    log.error("生成补全内容失败", e)
                     config.errorFileText
                 }
 
-            placeholderMessage.await()?.let {
+            val placeholder = placeholderMessage.await()
+
+            if (placeholder == null) {
+                log.error("占位消息发送失败，丢弃本次回复（chatId={}）", parsed.chat.id)
+            } else {
                 TelegramApi.replyMarkdownChunked(
                     bot = bot,
-                    chatId = it.chat.id,
+                    chatId = placeholder.chat.id,
                     content = content,
-                    placeholderMessageId = it.messageId,
+                    placeholderMessageId = placeholder.messageId,
                     replyParams = ReplyParameters(parsed.messageId),
                 )
             }

@@ -8,12 +8,16 @@ import eu.vendeli.tgbot.api.message.editText
 import eu.vendeli.tgbot.api.message.message
 import eu.vendeli.tgbot.types.common.ReplyParameters
 import eu.vendeli.tgbot.types.component.ParseMode
-import eu.vendeli.tgbot.types.component.getOrNull
+import eu.vendeli.tgbot.types.component.onFailure
 import eu.vendeli.tgbot.types.msg.Message
 import kotlinx.coroutines.CancellationException
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.util.Base64
 
 object TelegramApi {
+    private val log: Logger = LoggerFactory.getLogger(TelegramApi::class.java)
+
     internal const val MAX_MESSAGE_LENGTH = 4096
 
     suspend fun replyMarkdownChunked(
@@ -66,10 +70,28 @@ object TelegramApi {
                 }
             }
 
-        val sent = action.sendReturning(chatId, bot).getOrNull()
+        val sent =
+            try {
+                action.sendReturning(chatId, bot).onFailure { failure ->
+                    log.warn(
+                        "发送 Markdown 消息失败（第 {} 次尝试，chatId={}）：{} {}",
+                        attempt + 1,
+                        chatId,
+                        failure.errorCode,
+                        failure.description,
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.warn("发送 Markdown 消息异常（第 {} 次尝试，chatId={}）", attempt + 1, chatId, e)
+                null
+            }
 
         if (sent == null && attempt < 3) {
             sendMarkdownWithRetry(bot = bot, chatId = chatId, text = text, replyParams = replyParams, attempt = attempt + 1)
+        } else if (sent == null) {
+            log.error("发送 Markdown 消息连续 {} 次失败，已放弃（chatId={}）", attempt + 1, chatId)
         }
     }
 
@@ -90,12 +112,37 @@ object TelegramApi {
                 }
             }
 
-        val sent = action.sendReturning(chatId, bot).getOrNull()
+        val sent =
+            try {
+                action.sendReturning(chatId, bot).onFailure { failure ->
+                    log.warn(
+                        "发送消息失败（第 {} 次尝试，chatId={}）：{} {}",
+                        attempt + 1,
+                        chatId,
+                        failure.errorCode,
+                        failure.description,
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.warn("发送消息异常（第 {} 次尝试，chatId={}）", attempt + 1, chatId, e)
+                null
+            }
 
         when {
-            sent != null -> callback?.invoke(sent)
-            attempt < 3 -> sendMessageWithRetry(bot, chatId, text, callback, replyParams, attempt + 1)
-            else -> callback?.invoke(null)
+            sent != null -> {
+                callback?.invoke(sent)
+            }
+
+            attempt < 3 -> {
+                sendMessageWithRetry(bot, chatId, text, callback, replyParams, attempt + 1)
+            }
+
+            else -> {
+                log.error("发送消息连续 {} 次失败，已放弃（chatId={}）", attempt + 1, chatId)
+                callback?.invoke(null)
+            }
         }
     }
 
@@ -108,15 +155,57 @@ object TelegramApi {
         attempt: Int = 0,
     ) {
         val edited =
-            editText(messageId) { content }
-                .options { parseMode = ParseMode.MarkdownV2 }
-                .sendReturning(chatId, bot)
-                .getOrNull() != null
+            try {
+                editText(messageId) { content }
+                    .options { parseMode = ParseMode.MarkdownV2 }
+                    .sendReturning(chatId, bot)
+                    .onFailure { failure ->
+                        log.warn(
+                            "编辑消息失败（第 {} 次尝试，chatId={}，messageId={}）：{} {}",
+                            attempt + 1,
+                            chatId,
+                            messageId,
+                            failure.errorCode,
+                            failure.description,
+                        )
+                    } != null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.warn("编辑消息异常（第 {} 次尝试，chatId={}，messageId={}）", attempt + 1, chatId, messageId, e)
+                false
+            }
 
         when {
-            edited -> Unit
-            attempt < 3 -> editMessageWithRetry(bot, chatId, content, messageId, fallbackContent, attempt + 1)
-            else -> editText(messageId) { truncate(fallbackContent, MAX_MESSAGE_LENGTH) }.sendReturning(chatId, bot).getOrNull()
+            edited -> {
+                Unit
+            }
+
+            attempt < 3 -> {
+                editMessageWithRetry(bot, chatId, content, messageId, fallbackContent, attempt + 1)
+            }
+
+            else -> {
+                log.warn("MarkdownV2 编辑消息连续失败，回退为纯文本（chatId={}，messageId={}）", chatId, messageId)
+
+                try {
+                    editText(messageId) { truncate(fallbackContent, MAX_MESSAGE_LENGTH) }
+                        .sendReturning(chatId, bot)
+                        .onFailure { failure ->
+                            log.error(
+                                "纯文本回退发送失败（chatId={}，messageId={}）：{} {}",
+                                chatId,
+                                messageId,
+                                failure.errorCode,
+                                failure.description,
+                            )
+                        }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log.error("纯文本回退发送异常（chatId={}，messageId={}）", chatId, messageId, e)
+                }
+            }
         }
     }
 
@@ -144,22 +233,34 @@ object TelegramApi {
     ): String? {
         if (attempt < maxAttempts) {
             return try {
-                val remote = getFile(file.fileId).sendReturning(bot).getOrNull()
+                val remote =
+                    getFile(file.fileId).sendReturning(bot).onFailure { failure ->
+                        log.warn(
+                            "获取文件信息失败（第 {} 次尝试，fileId={}）：{} {}",
+                            attempt + 1,
+                            file.fileId,
+                            failure.errorCode,
+                            failure.description,
+                        )
+                    }
                 val bytes = remote?.let { bot.getFileContent(it) }
 
                 if (bytes != null) {
                     "data:image/${file.mimeType};base64," +
                         Base64.getEncoder().encodeToString(bytes)
                 } else {
+                    log.warn("获取文件内容失败（第 {} 次尝试，fileId={}）", attempt + 1, file.fileId)
                     getFileDataUrl(bot, file, maxAttempts, attempt + 1)
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                log.warn("下载文件异常（第 {} 次尝试，fileId={}）", attempt + 1, file.fileId, e)
                 getFileDataUrl(bot, file, maxAttempts, attempt + 1)
             }
         }
 
+        log.error("下载文件连续 {} 次失败，已放弃（fileId={}）", maxAttempts, file.fileId)
         return null
     }
 }
