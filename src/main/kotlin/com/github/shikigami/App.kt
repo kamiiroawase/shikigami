@@ -302,8 +302,7 @@ class App(
                         break
                     } catch (e: CancellationException) {
                         throw e
-                    } catch (e: Exception) {
-                        log.error("处理 Telegram 更新失败，$retryAfter 秒后重试", e)
+                    } catch (_: Exception) {
                         delay(retryAfter.seconds)
                     }
                 }
