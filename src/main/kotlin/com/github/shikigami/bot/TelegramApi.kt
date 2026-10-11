@@ -232,10 +232,6 @@ object TelegramApi {
                 Unit
             }
 
-            attempt < 3 -> {
-                editMessageWithRetry(bot, chatId, content, messageId, fallbackContent, attempt + 1)
-            }
-
             markdownFailure?.errorCode == 400 -> {
                 log.warn("MarkdownV2 编辑消息返回 400，跳过重试回退为纯文本（chatId={}，messageId={}）", chatId, messageId)
                 editFallbackPlainText(
@@ -244,6 +240,10 @@ object TelegramApi {
                     messageId = messageId,
                     fallbackContent = fallbackContent,
                 )
+            }
+
+            attempt < 3 -> {
+                editMessageWithRetry(bot, chatId, content, messageId, fallbackContent, attempt + 1)
             }
 
             else -> {
