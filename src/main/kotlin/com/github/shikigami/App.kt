@@ -161,10 +161,8 @@ class App(
                                 .firstOrNull()
                                 ?.message
                                 ?.content
-                                ?.let {
-                                    it.ifBlank {
-                                        null
-                                    }
+                                ?.takeUnless {
+                                    isBlankForTelegram(it)
                                 } ?: config.errorEmptyText
                         } catch (e: CancellationException) {
                             throw e
@@ -323,3 +321,6 @@ internal suspend fun awaitPendingWork(
     withTimeoutOrNull(gracePeriod) {
         parentJob.children.toList().joinAll()
     } != null
+
+internal fun isBlankForTelegram(text: String): Boolean =
+    text.all { it.isWhitespace() || it.code in 0x200B..0x200F || it.code == 0x2060 || it.code == 0xFEFF }

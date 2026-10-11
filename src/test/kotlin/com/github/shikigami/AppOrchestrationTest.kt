@@ -29,6 +29,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -294,6 +295,40 @@ class AppOrchestrationTest {
         val edit = requests.first { it.path!!.endsWith("/editMessageText") }
 
         assertTrue(edit.body.readUtf8().contains("error"))
+    }
+
+    @Test
+    fun invisibleLlmReplyEditsErrorEmptyTextIntoPlaceholder() {
+        server.dispatcher =
+            object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse =
+                    if (request.path!!.endsWith("/chat/completions")) {
+                        json(COMPLETION_BODY.replace("模型回复", "\\u200B"))
+                    } else {
+                        json(MESSAGE_BODY)
+                    }
+            }
+
+        app.handleMessage(bot, completionMessage(user(), chatId = WHITELISTED_CHAT_ID), config, commands)
+
+        val requests = drainRequests(3)
+        val edit = requests.first { it.path!!.endsWith("/editMessageText") }
+
+        assertTrue(edit.body.readUtf8().contains("empty"))
+        assertFalse(edit.body.readUtf8().contains("%E2%80%8B"))
+    }
+
+    @Test
+    fun isBlankForTelegramDetectsInvisibleCharacters() {
+        assertTrue(isBlankForTelegram(""))
+        assertTrue(isBlankForTelegram(" "))
+        assertTrue(isBlankForTelegram("\n"))
+        assertTrue(isBlankForTelegram(" "))
+        assertTrue(isBlankForTelegram("​"))
+        assertTrue(isBlankForTelegram("⁠"))
+        assertTrue(isBlankForTelegram("﻿"))
+        assertFalse(isBlankForTelegram("a"))
+        assertFalse(isBlankForTelegram("a​"))
     }
 
     @Test
