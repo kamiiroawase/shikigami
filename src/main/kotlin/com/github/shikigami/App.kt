@@ -60,7 +60,7 @@ class App(
                         bot = bot,
                         chatId = parsed.chat.id,
                         text = config.commandStartText,
-                        replyParams = ReplyParameters(parsed.messageId),
+                        replyParams = replyParams(parsed.messageId),
                     )
                 }
             }
@@ -80,7 +80,7 @@ class App(
                             bot = bot,
                             chatId = parsed.chat.id,
                             text = config.rateLimitText,
-                            replyParams = ReplyParameters(parsed.messageId),
+                            replyParams = replyParams(parsed.messageId),
                         )
                     }
 
@@ -121,7 +121,7 @@ class App(
                     bot = bot,
                     chatId = parsed.chat.id,
                     text = config.placeholderText,
-                    replyParams = ReplyParameters(parsed.messageId),
+                    replyParams = replyParams(parsed.messageId),
                     callback = placeholderMessage::complete,
                 )
             } finally {
@@ -192,7 +192,7 @@ class App(
                     bot = bot,
                     chatId = parsed.chat.id,
                     content = content,
-                    replyParams = ReplyParameters(parsed.messageId),
+                    replyParams = replyParams(parsed.messageId),
                 )
             } else {
                 TelegramApi.replyMarkdownChunked(
@@ -200,11 +200,16 @@ class App(
                     chatId = placeholder.chat.id,
                     content = content,
                     placeholderMessageId = placeholder.messageId,
-                    replyParams = ReplyParameters(parsed.messageId),
+                    replyParams = replyParams(parsed.messageId),
                 )
             }
         }
     }
+
+    private fun replyParams(messageId: Long) =
+        ReplyParameters(messageId).apply {
+            allowSendingWithoutReply = true
+        }
 
     internal fun buildAdminReport(
         parsed: ParsedMessage,
