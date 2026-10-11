@@ -5,7 +5,7 @@ mockwebserver = "4.12.0"
 openai = "4.1.0"
 slf4j = "2.0.17"
 spotless = "8.10.3"
-telegramMarkdownv2 = "2.1.0"
+telegramMarkdownv2 = "2.2.0"
 vendeliTelegramBot = "9.6.0"
 
 [libraries]
