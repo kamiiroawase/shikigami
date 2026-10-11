@@ -7,6 +7,7 @@ import eu.vendeli.tgbot.api.message.editText
 import eu.vendeli.tgbot.api.message.message
 import eu.vendeli.tgbot.types.common.ReplyParameters
 import eu.vendeli.tgbot.types.component.ParseMode
+import eu.vendeli.tgbot.types.component.Response
 import eu.vendeli.tgbot.types.component.onFailure
 import eu.vendeli.tgbot.types.msg.Message
 import io.github.kamiiroawase.markdownv2.MarkdownV2
@@ -200,12 +201,16 @@ object TelegramApi {
         fallbackContent: String,
         attempt: Int = 0,
     ) {
+        var markdownFailure: Response.Failure? = null
+
         val edited =
             try {
                 editText(messageId) { content }
                     .options { parseMode = ParseMode.MarkdownV2 }
                     .sendReturning(chatId, bot)
                     .onFailure { failure ->
+                        markdownFailure = failure
+
                         log.warn(
                             "编辑消息失败（第 {} 次尝试，chatId={}，messageId={}）：{} {}",
                             attempt + 1,
@@ -231,27 +236,50 @@ object TelegramApi {
                 editMessageWithRetry(bot, chatId, content, messageId, fallbackContent, attempt + 1)
             }
 
+            markdownFailure?.errorCode == 400 -> {
+                log.warn("MarkdownV2 编辑消息返回 400，跳过重试回退为纯文本（chatId={}，messageId={}）", chatId, messageId)
+                editFallbackPlainText(
+                    bot = bot,
+                    chatId = chatId,
+                    messageId = messageId,
+                    fallbackContent = fallbackContent,
+                )
+            }
+
             else -> {
                 log.warn("MarkdownV2 编辑消息连续失败，回退为纯文本（chatId={}，messageId={}）", chatId, messageId)
-
-                try {
-                    editText(messageId) { truncate(fallbackContent, MAX_MESSAGE_LENGTH) }
-                        .sendReturning(chatId, bot)
-                        .onFailure { failure ->
-                            log.error(
-                                "纯文本回退发送失败（chatId={}，messageId={}）：{} {}",
-                                chatId,
-                                messageId,
-                                failure.errorCode,
-                                failure.description,
-                            )
-                        }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    log.error("纯文本回退发送异常（chatId={}，messageId={}）", chatId, messageId, e)
-                }
+                editFallbackPlainText(
+                    bot = bot,
+                    chatId = chatId,
+                    messageId = messageId,
+                    fallbackContent = fallbackContent,
+                )
             }
+        }
+    }
+
+    private suspend fun editFallbackPlainText(
+        bot: TelegramBot,
+        chatId: Long,
+        messageId: Long,
+        fallbackContent: String,
+    ) {
+        try {
+            editText(messageId) { truncate(fallbackContent, MAX_MESSAGE_LENGTH) }
+                .sendReturning(chatId, bot)
+                .onFailure { failure ->
+                    log.error(
+                        "纯文本回退发送失败（chatId={}，messageId={}）：{} {}",
+                        chatId,
+                        messageId,
+                        failure.errorCode,
+                        failure.description,
+                    )
+                }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error("纯文本回退发送异常（chatId={}，messageId={}）", chatId, messageId, e)
         }
     }
 

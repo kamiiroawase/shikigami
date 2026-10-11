@@ -45,6 +45,11 @@ class TelegramApiRetryTest {
             .setHeader("Content-Type", "application/json")
             .setBody(FAILURE_BODY)
 
+    private fun serverError() =
+        MockResponse()
+            .setHeader("Content-Type", "application/json")
+            .setBody("""{"ok":false,"error_code":500,"description":"Internal Server Error"}""")
+
     private fun dispatchByBody(rule: (String) -> MockResponse): RecordingDispatcher = RecordingDispatcher { _, body -> rule(body) }
 
     private fun drainRequests(count: Int): List<RecordedRequest> =
@@ -187,11 +192,37 @@ class TelegramApiRetryTest {
         }
 
     @Test
-    fun editMessageWithRetryFallsBackToPlainTextAfterFourMarkdownFailures() =
+    fun editMessageWithRetryFallsBackToPlainTextImmediatelyOnBadRequest() =
         runBlocking {
             server.dispatcher =
                 dispatchByBody { body ->
                     if (body.contains("MarkdownV2")) failure() else okMessage()
+                }
+
+            TelegramApi.editMessageWithRetry(
+                bot = bot,
+                chatId = CHAT_ID,
+                content = MarkdownV2.escape("hello world"),
+                messageId = 555L,
+                fallbackContent = "hello world",
+            )
+
+            val bodies =
+                server.dispatcher
+                    .let { it as RecordingDispatcher }
+                    .recorded
+                    .map { it.second }
+            assertEquals(2, bodies.size)
+            assertEquals(1, bodies.count { it.contains("MarkdownV2") })
+            assertTrue(bodies.last().contains("hello world"))
+        }
+
+    @Test
+    fun editMessageWithRetryRetriesTransientErrorsBeforeFallback() =
+        runBlocking {
+            server.dispatcher =
+                dispatchByBody { body ->
+                    if (body.contains("MarkdownV2")) serverError() else okMessage()
                 }
 
             TelegramApi.editMessageWithRetry(
