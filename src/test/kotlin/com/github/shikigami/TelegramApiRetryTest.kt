@@ -276,6 +276,8 @@ class TelegramApiRetryTest {
             )
 
             val bodies = drainRequests(chunks.size).map { it.body.readUtf8() }
+            println("DEBUG_BODY_1=${bodies.first().take(400)}")
+            println("DEBUG_BODY_2=${bodies[1].take(400)}")
             assertTrue(bodies.first().contains("\"message_id\":111"))
             bodies.drop(1).forEachIndexed { index, body ->
                 assertTrue(body.contains("\"message_id\":${555L + index}"), "第 ${index + 2} 段应回复上一段消息")
