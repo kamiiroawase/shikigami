@@ -246,6 +246,38 @@ class TelegramApiRetryTest {
         }
 
     @Test
+    fun editMessageWithRetrySendsNewMessageWhenPlaceholderIsGone() =
+        runBlocking {
+            val dispatcher =
+                RecordingDispatcher { path, _ ->
+                    if (path.endsWith("/editMessageText")) {
+                        MockResponse()
+                            .setResponseCode(400)
+                            .setHeader("Content-Type", "application/json")
+                            .setBody("""{"ok":false,"error_code":400,"description":"Bad Request: message to edit not found"}""")
+                    } else {
+                        okMessage()
+                    }
+                }
+            server.dispatcher = dispatcher
+
+            TelegramApi.editMessageWithRetry(
+                bot = bot,
+                chatId = CHAT_ID,
+                content = MarkdownV2.escape("hello world"),
+                messageId = 555L,
+                fallbackContent = "hello world",
+                replyParams = TelegramApi.replyParams(1L),
+            )
+
+            awaitRecorded(dispatcher, 3)
+            assertEquals(2, dispatcher.recorded.count { it.first.endsWith("/editMessageText") })
+            val send = dispatcher.recorded.single { it.first.endsWith("/sendMessage") }
+            assertTrue(send.second.contains("hello world"))
+            assertTrue(send.second.contains("allow_sending_without_reply"))
+        }
+
+    @Test
     fun sendMarkdownChunkedSendsEveryChunk() =
         runBlocking {
             val content = "word ".repeat(2000)

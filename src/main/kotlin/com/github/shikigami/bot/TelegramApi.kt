@@ -42,6 +42,7 @@ object TelegramApi {
                 content = MarkdownV2.escape(content),
                 messageId = placeholderMessageId,
                 fallbackContent = content,
+                replyParams = replyParams,
             )
             return
         }
@@ -52,6 +53,7 @@ object TelegramApi {
             content = chunks.first(),
             messageId = placeholderMessageId,
             fallbackContent = content,
+            replyParams = replyParams,
         )
 
         sendChunks(bot = bot, chatId = chatId, chunks = chunks.drop(1), initialReplyParams = replyParams)
@@ -212,6 +214,7 @@ object TelegramApi {
         content: String,
         messageId: Long,
         fallbackContent: String,
+        replyParams: ReplyParameters? = null,
         attempt: Int = 0,
     ) {
         var markdownFailure: Response.Failure? = null
@@ -252,11 +255,12 @@ object TelegramApi {
                     chatId = chatId,
                     messageId = messageId,
                     fallbackContent = fallbackContent,
+                    replyParams = replyParams,
                 )
             }
 
             attempt < 3 -> {
-                editMessageWithRetry(bot, chatId, content, messageId, fallbackContent, attempt + 1)
+                editMessageWithRetry(bot, chatId, content, messageId, fallbackContent, replyParams, attempt + 1)
             }
 
             else -> {
@@ -266,33 +270,44 @@ object TelegramApi {
                     chatId = chatId,
                     messageId = messageId,
                     fallbackContent = fallbackContent,
+                    replyParams = replyParams,
                 )
             }
         }
     }
 
+    // 纯文本编辑仍失败（占位消息被删、权限变化等）说明编辑目标已不可达，
+    // 直接发一条新消息保证回复送达；不依赖错误文案，只看编辑是否成功
     private suspend fun editFallbackPlainText(
         bot: TelegramBot,
         chatId: Long,
         messageId: Long,
         fallbackContent: String,
+        replyParams: ReplyParameters?,
     ) {
-        try {
-            editText(messageId) { truncate(fallbackContent, MAX_MESSAGE_LENGTH) }
-                .sendReturning(chatId, bot)
-                .onFailure { failure ->
-                    log.error(
-                        "纯文本回退发送失败（chatId={}，messageId={}）：{} {}",
-                        chatId,
-                        messageId,
-                        failure.errorCode,
-                        failure.description,
-                    )
-                }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            log.error("纯文本回退发送异常（chatId={}，messageId={}）", chatId, messageId, e)
+        val edited =
+            try {
+                editText(messageId) { truncate(fallbackContent, MAX_MESSAGE_LENGTH) }
+                    .sendReturning(chatId, bot)
+                    .onFailure { failure ->
+                        log.error(
+                            "纯文本回退发送失败（chatId={}，messageId={}）：{} {}",
+                            chatId,
+                            messageId,
+                            failure.errorCode,
+                            failure.description,
+                        )
+                    }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.error("纯文本回退发送异常（chatId={}，messageId={}）", chatId, messageId, e)
+                null
+            }
+
+        if (edited == null) {
+            log.warn("占位消息已无法编辑，降级为直接发送新消息（chatId={}，messageId={}）", chatId, messageId)
+            sendMessageWithRetry(bot = bot, chatId = chatId, text = fallbackContent, replyParams = replyParams)
         }
     }
 
