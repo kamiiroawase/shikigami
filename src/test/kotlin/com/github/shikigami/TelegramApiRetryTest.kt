@@ -265,8 +265,8 @@ class TelegramApiRetryTest {
             assertTrue(chunks.size > 1)
 
             var nextMessageId = 555L
-            server.dispatcher =
-                dispatchByBody { _ -> okMessage(nextMessageId++) }
+            val dispatcher = RecordingDispatcher { _, _ -> okMessage(nextMessageId++) }
+            server.dispatcher = dispatcher
 
             TelegramApi.sendMarkdownChunked(
                 bot = bot,
@@ -275,9 +275,8 @@ class TelegramApiRetryTest {
                 replyParams = TelegramApi.replyParams(111L),
             )
 
-            val bodies = drainRequests(chunks.size).map { it.body.readUtf8() }
-            println("DEBUG_BODY_1=${bodies.first().take(400)}")
-            println("DEBUG_BODY_2=${bodies[1].take(400)}")
+            drainRequests(chunks.size)
+            val bodies = dispatcher.recorded.map { it.second }
             assertTrue(bodies.first().contains("\"message_id\":111"))
             bodies.drop(1).forEachIndexed { index, body ->
                 assertTrue(body.contains("\"message_id\":${555L + index}"), "第 ${index + 2} 段应回复上一段消息")
@@ -292,8 +291,8 @@ class TelegramApiRetryTest {
             assertTrue(chunks.size > 1)
 
             var nextMessageId = 555L
-            server.dispatcher =
-                dispatchByBody { _ -> okMessage(nextMessageId++) }
+            val dispatcher = RecordingDispatcher { _, _ -> okMessage(nextMessageId++) }
+            server.dispatcher = dispatcher
 
             TelegramApi.replyMarkdownChunked(
                 bot = bot,
@@ -303,9 +302,14 @@ class TelegramApiRetryTest {
                 replyParams = TelegramApi.replyParams(111L),
             )
 
-            val requests = drainRequests(chunks.size)
-            assertTrue(requests.first().path!!.endsWith("/editMessageText"))
-            val bodies = requests.map { it.body.readUtf8() }
+            drainRequests(chunks.size)
+            assertTrue(
+                dispatcher.recorded
+                    .first()
+                    .first
+                    .endsWith("/editMessageText"),
+            )
+            val bodies = dispatcher.recorded.map { it.second }
             assertTrue(bodies.first().contains("\"message_id\":900"))
             assertTrue(bodies[1].contains("\"message_id\":111"))
             bodies.drop(2).forEachIndexed { index, body ->
@@ -322,12 +326,13 @@ class TelegramApiRetryTest {
 
             var nextMessageId = 555L
             var requestIndex = 0
-            server.dispatcher =
-                dispatchByBody { _ ->
+            val dispatcher =
+                RecordingDispatcher { _, _ ->
                     val index = requestIndex++
                     // 请求 1-8：第 2 段的 4 次 Markdown 发送 + 4 次纯文本回退全部失败，其余请求成功
                     if (index in 1..8) failure() else okMessage(nextMessageId++)
                 }
+            server.dispatcher = dispatcher
 
             TelegramApi.sendMarkdownChunked(
                 bot = bot,
@@ -337,8 +342,9 @@ class TelegramApiRetryTest {
             )
 
             val totalRequests = 1 + 8 + (chunks.size - 2)
-            val bodies = drainRequests(totalRequests).map { it.body.readUtf8() }
+            drainRequests(totalRequests)
             assertEquals(totalRequests, server.requestCount)
+            val bodies = dispatcher.recorded.map { it.second }
             // 第 2 段放弃后，第 3 段应回复第 1 段（message_id 555），第 4 段回复第 3 段（message_id 556）
             assertTrue(bodies[9].contains("\"message_id\":555"))
             assertTrue(bodies[10].contains("\"message_id\":556"))
