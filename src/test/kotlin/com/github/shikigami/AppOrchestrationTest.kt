@@ -258,6 +258,40 @@ class AppOrchestrationTest {
     }
 
     @Test
+    fun completionCommandRecoversWhenPlaceholderDeletedMidFlight() {
+        val dispatcher =
+            RecordingDispatcher { path, _ ->
+                when {
+                    path.endsWith("/chat/completions") -> {
+                        json(COMPLETION_BODY)
+                    }
+
+                    path.endsWith("/editMessageText") -> {
+                        MockResponse()
+                            .setResponseCode(400)
+                            .setHeader("Content-Type", "application/json")
+                            .setBody("""{"ok":false,"error_code":400,"description":"Bad Request: message to edit not found"}""")
+                    }
+
+                    else -> {
+                        json(MESSAGE_BODY)
+                    }
+                }
+            }
+        server.dispatcher = dispatcher
+
+        app.handleMessage(bot, completionMessage(user(), chatId = WHITELISTED_CHAT_ID), config, commands)
+
+        awaitRecorded(dispatcher, 5)
+
+        // 占位消息被删：Markdown 编辑与纯文本编辑各失败一次，随后降级为直接发送新消息
+        assertEquals(2, dispatcher.recorded.count { it.first.endsWith("/editMessageText") })
+        val sends = dispatcher.recorded.filter { it.first.endsWith("/sendMessage") }
+        assertEquals(2, sends.size)
+        assertTrue(sends.last().second.contains("模型回复"))
+    }
+
+    @Test
     fun completionCommandSendsRateLimitTextWhenExceeded() {
         val from = user()
         val message = completionMessage(from, chatId = WHITELISTED_CHAT_ID)

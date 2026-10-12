@@ -56,7 +56,12 @@ object TelegramApi {
             replyParams = replyParams,
         )
 
-        sendChunks(bot = bot, chatId = chatId, chunks = chunks.drop(1), initialReplyParams = replyParams)
+        sendChunks(
+            bot = bot,
+            chatId = chatId,
+            chunks = chunks.drop(1),
+            initialReplyParams = replyParams(placeholderMessageId),
+        )
     }
 
     suspend fun sendMarkdownChunked(
@@ -87,7 +92,7 @@ object TelegramApi {
         chunks: List<String>,
         initialReplyParams: ReplyParameters? = null,
     ) {
-        // 首段回复用户消息，后续各段回复机器人自己发出的上一段；某段彻底发送失败时链保持在最后一条成功的消息
+        // 首个发送段回复 initialReplyParams 指向的消息（无占位时为用户消息），后续各段回复机器人自己发出的上一段；某段彻底发送失败时链保持在最后一条成功的消息
         var previous: Message? = null
 
         chunks.forEach { chunk ->

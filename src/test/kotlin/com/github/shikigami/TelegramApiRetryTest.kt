@@ -348,7 +348,7 @@ class TelegramApiRetryTest {
             )
             val bodies = dispatcher.recorded.map { it.second }
             assertTrue(bodies.first().contains("\"message_id\":900"))
-            assertTrue(bodies[1].contains("\"message_id\":111"))
+            assertTrue(bodies[1].contains("\"message_id\":900"), "第 2 段应回复占位消息而非用户消息")
             bodies.drop(2).forEachIndexed { index, body ->
                 assertTrue(body.contains("\"message_id\":${555L + index}"), "第 ${index + 3} 段应回复上一段消息")
             }
