@@ -66,6 +66,8 @@ class TelegramApiRetryTest {
         bot =
             TelegramBot(token = TOKEN) {
                 apiHost = "http://${server.hostName}:${server.port}"
+                // 库内 5xx 重试默认退避 3/6/9s，关闭以免外层重试测试真实睡眠
+                httpClient { maxRequestRetry = 0 }
             }
     }
 
@@ -238,8 +240,8 @@ class TelegramApiRetryTest {
                     .let { it as RecordingDispatcher }
                     .recorded
                     .map { it.second }
-            // 库的 HTTP 层对 5xx 还有内建重试，总请求数不固定；只断言 4 轮外层重试都发生、最终降级纯文本
-            assertTrue(bodies.count { it.contains("MarkdownV2") } >= 4)
+            assertEquals(5, bodies.size)
+            assertEquals(4, bodies.count { it.contains("MarkdownV2") })
             assertTrue(bodies.last().contains("hello world"))
         }
 
@@ -291,7 +293,10 @@ class TelegramApiRetryTest {
             assertTrue(chunks.size > 1)
 
             var nextMessageId = 555L
-            val dispatcher = RecordingDispatcher { _, _ -> okMessage(nextMessageId++) }
+            val dispatcher =
+                RecordingDispatcher { path, _ ->
+                    if (path.endsWith("/editMessageText")) okMessage(900L) else okMessage(nextMessageId++)
+                }
             server.dispatcher = dispatcher
 
             TelegramApi.replyMarkdownChunked(

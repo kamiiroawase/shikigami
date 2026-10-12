@@ -244,6 +244,7 @@ class App(
                         connectTimeoutMillis = 10_000L
                         socketTimeoutMillis = 35_000L
                         requestTimeoutMillis = 60_000L
+                        maxRequestRetry = 0
                     }
                 }
 

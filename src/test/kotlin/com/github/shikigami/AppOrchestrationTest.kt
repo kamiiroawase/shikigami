@@ -115,6 +115,8 @@ class AppOrchestrationTest {
         bot =
             TelegramBot(token = TOKEN) {
                 apiHost = "http://${server.hostName}:${server.port}"
+                // 库内 5xx 重试默认退避 3/6/9s，关闭以免失败路径测试真实睡眠
+                httpClient { maxRequestRetry = 0 }
             }
 
         val openAi =
