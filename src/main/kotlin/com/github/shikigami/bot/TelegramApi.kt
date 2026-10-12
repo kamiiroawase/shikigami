@@ -21,6 +21,11 @@ object TelegramApi {
 
     internal const val MAX_MESSAGE_LENGTH = 4096
 
+    internal fun replyParams(messageId: Long) =
+        ReplyParameters(messageId).apply {
+            allowSendingWithoutReply = true
+        }
+
     suspend fun replyMarkdownChunked(
         bot: TelegramBot,
         chatId: Long,
@@ -49,7 +54,7 @@ object TelegramApi {
             fallbackContent = content,
         )
 
-        sendChunks(bot = bot, chatId = chatId, chunks = chunks.drop(1), replyParams = replyParams)
+        sendChunks(bot = bot, chatId = chatId, chunks = chunks.drop(1), initialReplyParams = replyParams)
     }
 
     suspend fun sendMarkdownChunked(
@@ -71,23 +76,27 @@ object TelegramApi {
             return
         }
 
-        sendChunks(bot = bot, chatId = chatId, chunks = chunks, replyParams = replyParams)
+        sendChunks(bot = bot, chatId = chatId, chunks = chunks, initialReplyParams = replyParams)
     }
 
     private suspend fun sendChunks(
         bot: TelegramBot,
         chatId: Long,
         chunks: List<String>,
-        replyParams: ReplyParameters? = null,
+        initialReplyParams: ReplyParameters? = null,
     ) {
+        // 首段回复用户消息，后续各段回复机器人自己发出的上一段；某段彻底发送失败时链保持在最后一条成功的消息
+        var previous: Message? = null
+
         chunks.forEach { chunk ->
-            sendMarkdownWithRetry(
-                bot = bot,
-                chatId = chatId,
-                text = chunk,
-                replyParams = replyParams,
-                fallbackContent = MarkdownV2.toPlainText(chunk),
-            )
+            previous =
+                sendMarkdownWithRetry(
+                    bot = bot,
+                    chatId = chatId,
+                    text = chunk,
+                    replyParams = previous?.let { replyParams(it.messageId) } ?: initialReplyParams,
+                    fallbackContent = MarkdownV2.toPlainText(chunk),
+                ) ?: previous
         }
     }
 
@@ -98,7 +107,7 @@ object TelegramApi {
         replyParams: ReplyParameters? = null,
         fallbackContent: String = text,
         attempt: Int = 0,
-    ) {
+    ): Message? {
         val action =
             message(text).apply {
                 options {
@@ -128,7 +137,7 @@ object TelegramApi {
             }
 
         if (sent == null && attempt < 3) {
-            sendMarkdownWithRetry(
+            return sendMarkdownWithRetry(
                 bot = bot,
                 chatId = chatId,
                 text = text,
@@ -138,8 +147,10 @@ object TelegramApi {
             )
         } else if (sent == null) {
             log.warn("Markdown 消息连续 {} 次发送失败，回退为纯文本（chatId={}）", attempt + 1, chatId)
-            sendMessageWithRetry(bot = bot, chatId = chatId, text = fallbackContent, replyParams = replyParams)
+            return sendMessageWithRetry(bot = bot, chatId = chatId, text = fallbackContent, replyParams = replyParams)
         }
+
+        return sent
     }
 
     suspend fun sendMessageWithRetry(
@@ -149,7 +160,7 @@ object TelegramApi {
         callback: ((Message?) -> Unit)? = null,
         replyParams: ReplyParameters? = null,
         attempt: Int = 0,
-    ) {
+    ): Message? {
         val truncated = truncate(text, MAX_MESSAGE_LENGTH)
 
         val action =
@@ -177,9 +188,10 @@ object TelegramApi {
                 null
             }
 
-        when {
+        return when {
             sent != null -> {
                 callback?.invoke(sent)
+                sent
             }
 
             attempt < 3 -> {
@@ -189,6 +201,7 @@ object TelegramApi {
             else -> {
                 log.error("发送消息连续 {} 次失败，已放弃（chatId={}）", attempt + 1, chatId)
                 callback?.invoke(null)
+                null
             }
         }
     }

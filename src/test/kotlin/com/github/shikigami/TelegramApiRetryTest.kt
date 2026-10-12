@@ -30,15 +30,13 @@ class TelegramApiRetryTest {
         const val TOKEN = "1:test-token"
         const val CHAT_ID = 42L
 
-        val MESSAGE_BODY =
-            """{"ok":true,"result":{"message_id":555,"date":1,"chat":{"id":$CHAT_ID,"type":"private"}}}"""
         val FAILURE_BODY = """{"ok":false,"error_code":400,"description":"Bad Request: test failure"}"""
     }
 
-    private fun okMessage() =
+    private fun okMessage(messageId: Long = 555L) =
         MockResponse()
             .setHeader("Content-Type", "application/json")
-            .setBody(MESSAGE_BODY)
+            .setBody("""{"ok":true,"result":{"message_id":$messageId,"date":1,"chat":{"id":$CHAT_ID,"type":"private"}}}""")
 
     private fun failure() =
         MockResponse()
@@ -257,6 +255,91 @@ class TelegramApiRetryTest {
 
             val requests = drainRequests(chunks.size)
             assertTrue(requests.all { it.path!!.endsWith("/sendMessage") })
+        }
+
+    @Test
+    fun sendMarkdownChunkedChainsRepliesToBotPreviousMessage() =
+        runBlocking {
+            val content = "word ".repeat(6000)
+            val chunks = MarkdownV2.renderChunked(content)
+            assertTrue(chunks.size > 1)
+
+            var nextMessageId = 555L
+            server.dispatcher =
+                dispatchByBody { _ -> okMessage(nextMessageId++) }
+
+            TelegramApi.sendMarkdownChunked(
+                bot = bot,
+                chatId = CHAT_ID,
+                content = content,
+                replyParams = TelegramApi.replyParams(111L),
+            )
+
+            val bodies = drainRequests(chunks.size).map { it.body.readUtf8() }
+            assertTrue(bodies.first().contains("\"message_id\":111"))
+            bodies.drop(1).forEachIndexed { index, body ->
+                assertTrue(body.contains("\"message_id\":${555L + index}"), "第 ${index + 2} 段应回复上一段消息")
+            }
+        }
+
+    @Test
+    fun replyMarkdownChunkedChainsSentChunksToBotPreviousMessage() =
+        runBlocking {
+            val content = "word ".repeat(6000)
+            val chunks = MarkdownV2.renderChunked(content)
+            assertTrue(chunks.size > 1)
+
+            var nextMessageId = 555L
+            server.dispatcher =
+                dispatchByBody { _ -> okMessage(nextMessageId++) }
+
+            TelegramApi.replyMarkdownChunked(
+                bot = bot,
+                chatId = CHAT_ID,
+                content = content,
+                placeholderMessageId = 900L,
+                replyParams = TelegramApi.replyParams(111L),
+            )
+
+            val requests = drainRequests(chunks.size)
+            assertTrue(requests.first().path!!.endsWith("/editMessageText"))
+            val bodies = requests.map { it.body.readUtf8() }
+            assertTrue(bodies.first().contains("\"message_id\":900"))
+            assertTrue(bodies[1].contains("\"message_id\":111"))
+            bodies.drop(2).forEachIndexed { index, body ->
+                assertTrue(body.contains("\"message_id\":${555L + index}"), "第 ${index + 3} 段应回复上一段消息")
+            }
+        }
+
+    @Test
+    fun sendMarkdownChunkedKeepsChainAtLastSuccessfulMessageWhenChunkFails() =
+        runBlocking {
+            val content = "word ".repeat(6000)
+            val chunks = MarkdownV2.renderChunked(content)
+            assertTrue(chunks.size >= 3)
+
+            var nextMessageId = 555L
+            var requestIndex = 0
+            server.dispatcher =
+                dispatchByBody { _ ->
+                    val index = requestIndex++
+                    // 请求 1-8：第 2 段的 4 次 Markdown 发送 + 4 次纯文本回退全部失败，其余请求成功
+                    if (index in 1..8) failure() else okMessage(nextMessageId++)
+                }
+
+            TelegramApi.sendMarkdownChunked(
+                bot = bot,
+                chatId = CHAT_ID,
+                content = content,
+                replyParams = TelegramApi.replyParams(111L),
+            )
+
+            val totalRequests = 1 + 8 + (chunks.size - 2)
+            val bodies = drainRequests(totalRequests).map { it.body.readUtf8() }
+            assertEquals(totalRequests, server.requestCount)
+            // 第 2 段放弃后，第 3 段应回复第 1 段（message_id 555），第 4 段回复第 3 段（message_id 556）
+            assertTrue(bodies[9].contains("\"message_id\":555"))
+            assertTrue(bodies[10].contains("\"message_id\":556"))
         }
 
     @Test

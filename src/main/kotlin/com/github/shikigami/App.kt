@@ -8,7 +8,6 @@ import com.github.shikigami.bot.TelegramApi
 import com.github.shikigami.model.BotConfig
 import com.github.shikigami.model.ParsedMessage
 import eu.vendeli.tgbot.TelegramBot
-import eu.vendeli.tgbot.types.common.ReplyParameters
 import eu.vendeli.tgbot.types.component.MessageUpdate
 import eu.vendeli.tgbot.types.component.UpdateType
 import eu.vendeli.tgbot.types.msg.Message
@@ -60,7 +59,7 @@ class App(
                         bot = bot,
                         chatId = parsed.chat.id,
                         text = config.commandStartText,
-                        replyParams = replyParams(parsed.messageId),
+                        replyParams = TelegramApi.replyParams(parsed.messageId),
                     )
                 }
             }
@@ -80,7 +79,7 @@ class App(
                             bot = bot,
                             chatId = parsed.chat.id,
                             text = config.rateLimitText,
-                            replyParams = replyParams(parsed.messageId),
+                            replyParams = TelegramApi.replyParams(parsed.messageId),
                         )
                     }
 
@@ -121,7 +120,7 @@ class App(
                     bot = bot,
                     chatId = parsed.chat.id,
                     text = config.placeholderText,
-                    replyParams = replyParams(parsed.messageId),
+                    replyParams = TelegramApi.replyParams(parsed.messageId),
                     callback = placeholderMessage::complete,
                 )
             } finally {
@@ -190,7 +189,7 @@ class App(
                     bot = bot,
                     chatId = parsed.chat.id,
                     content = content,
-                    replyParams = replyParams(parsed.messageId),
+                    replyParams = TelegramApi.replyParams(parsed.messageId),
                 )
             } else {
                 TelegramApi.replyMarkdownChunked(
@@ -198,16 +197,11 @@ class App(
                     chatId = placeholder.chat.id,
                     content = content,
                     placeholderMessageId = placeholder.messageId,
-                    replyParams = replyParams(parsed.messageId),
+                    replyParams = TelegramApi.replyParams(parsed.messageId),
                 )
             }
         }
     }
-
-    private fun replyParams(messageId: Long) =
-        ReplyParameters(messageId).apply {
-            allowSendingWithoutReply = true
-        }
 
     internal fun buildAdminReport(
         parsed: ParsedMessage,
