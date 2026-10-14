@@ -2,6 +2,7 @@ package com.github.shikigami
 
 import com.aallam.openai.api.chat.ChatCompletionRequest
 import com.aallam.openai.api.chat.ChatRole
+import com.aallam.openai.client.OpenAI
 import com.github.shikigami.ai.ChatMessageFactory
 import com.github.shikigami.bot.MessageParser
 import com.github.shikigami.bot.TelegramApi
@@ -20,6 +21,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -151,16 +154,12 @@ class App(
                     if (openAiMessages.any { it.role != ChatRole.System }) {
                         try {
                             command.client
-                                .chatCompletion(
+                                .chatCompletionText(
                                     ChatCompletionRequest(
                                         messages = openAiMessages,
                                         model = command.model,
                                     ),
-                                ).choices
-                                .firstOrNull()
-                                ?.message
-                                ?.content
-                                ?.takeUnless {
+                                ).takeUnless {
                                     isBlankForTelegram(it)
                                 } ?: config.errorEmptyText
                         } catch (e: CancellationException) {
@@ -319,3 +318,14 @@ internal suspend fun awaitPendingWork(
 
 internal fun isBlankForTelegram(text: String): Boolean =
     text.all { it.isWhitespace() || it.code in 0x200B..0x200F || it.code == 0x2060 || it.code == 0xFEFF }
+
+// 流式补全只聚合正文增量，推理模型的思考内容（reasoning_content）天然被排除
+private suspend fun OpenAI.chatCompletionText(request: ChatCompletionRequest): String =
+    chatCompletions(request)
+        .mapNotNull {
+            it.choices
+                .firstOrNull()
+                ?.delta
+                ?.content
+        }.toList()
+        .joinToString(separator = "")

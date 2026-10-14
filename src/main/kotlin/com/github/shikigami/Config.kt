@@ -14,6 +14,8 @@ import java.io.FileInputStream
 import java.io.InputStreamReader
 import java.nio.charset.StandardCharsets
 import java.util.Properties
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 object Config {
@@ -109,14 +111,13 @@ object Config {
             OpenAIConfig(
                 timeout =
                     Timeout(
-                        request = 360.seconds,
-                        socket = 300.seconds,
+                        request = 1.hours,
+                        socket = 5.minutes,
                         connect = 10.seconds,
                     ),
                 logging = LoggingConfig(logLevel = LogLevel.None),
                 token = props.getProperty("openai.provider.$provider.token").orEmpty(),
                 host = OpenAIHost(props.getProperty("openai.provider.$provider.host").orEmpty()),
-                // 上层调用失败后直接兜底为错误文案，库内重试只会在 360s 超时上叠加等待
                 retry = RetryStrategy(maxRetries = 0),
             ),
         )

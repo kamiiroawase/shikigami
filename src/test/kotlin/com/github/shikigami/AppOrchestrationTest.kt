@@ -52,14 +52,23 @@ class AppOrchestrationTest {
             """{"ok":true,"result":{"message_id":555,"date":1,"chat":{"id":42,"type":"private"}}}"""
         val FAILURE_BODY = """{"ok":false,"error_code":400,"description":"Bad Request: test failure"}"""
         val COMPLETION_BODY =
-            """{"id":"chatcmpl-1","created":1,"model":"test-model",""" +
-                """"choices":[{"index":0,"message":{"role":"assistant","content":"模型回复"},"finish_reason":"stop"}],""" +
-                """"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"""
+            sequenceOf(
+                """data: {"id":"chatcmpl-1","created":1,"model":"test-model",""" +
+                    """"choices":[{"index":0,"delta":{"role":"assistant","content":"模型回复"},"finish_reason":null}]}""",
+                """data: {"id":"chatcmpl-1","created":1,"model":"test-model",""" +
+                    """"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}""",
+                """data: [DONE]""",
+            ).joinToString(separator = "\n\n", postfix = "\n\n")
     }
 
     private fun json(body: String) =
         MockResponse()
             .setHeader("Content-Type", "application/json")
+            .setBody(body)
+
+    private fun sse(body: String) =
+        MockResponse()
+            .setHeader("Content-Type", "text/event-stream")
             .setBody(body)
 
     private fun alwaysSucceedDispatcher() =
@@ -68,7 +77,7 @@ class AppOrchestrationTest {
                 when {
                     request.path!!.endsWith("/sendMessage") -> json(MESSAGE_BODY)
                     request.path!!.endsWith("/editMessageText") -> json(MESSAGE_BODY)
-                    request.path!!.endsWith("/chat/completions") -> json(COMPLETION_BODY)
+                    request.path!!.endsWith("/chat/completions") -> sse(COMPLETION_BODY)
                     else -> json("""{"ok":false,"error_code":404,"description":"unexpected path"}""")
                 }
         }
@@ -229,7 +238,7 @@ class AppOrchestrationTest {
             RecordingDispatcher { path, body ->
                 when {
                     path.endsWith("/chat/completions") -> {
-                        json(COMPLETION_BODY)
+                        sse(COMPLETION_BODY)
                     }
 
                     !path.endsWith("/sendMessage") -> {
@@ -263,7 +272,7 @@ class AppOrchestrationTest {
             RecordingDispatcher { path, _ ->
                 when {
                     path.endsWith("/chat/completions") -> {
-                        json(COMPLETION_BODY)
+                        sse(COMPLETION_BODY)
                     }
 
                     path.endsWith("/editMessageText") -> {
